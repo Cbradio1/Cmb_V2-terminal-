@@ -1,36 +1,50 @@
-const express = require('express');
-const axios = require('axios');
-const app = express();
-
-app.use(express.static('public'));
-
-// --- MATH ENGINE ---
-function simulate(a, b) {
-    let wins = 0;
-    for(let i=0; i<10000; i++) {
-        if (genP(a) > genP(b)) wins++;
-    }
-    return (wins/10000)*100;
-}
-function genP(l) { 
-    let L = Math.exp(-l), p = 1.0, k = 0;
-    do { k++; p *= Math.random(); } while (p > L);
-    return k - 1;
-}
-
 app.get('/api/predict', async (req, res) => {
-    // 1. Fetch Roster/Injury Data from your Paid API
-    // 2. Apply "Missing Player" Penalties (xG - 0.5 per star)
-    // 3. Apply "Back-to-Back" Fatigue (xG * 0.95)
-    
-    const mockData = [{
-        matchup: "NHL Underdog vs Favorite",
-        xG_A: 2.8, xG_B: 2.4, // Calculated from Roster + Fatigue
-        upsetChance: 0, total: 5.2, isVermeer: true, edge: 12.5
-    }];
+    try {
+        const API_KEY = 'YOUR_ACTUAL_API_KEY_HERE';
+        const BASE_URL = 'https://api.sportsdata.io/v3/nhl/scores/json/GamesByDate/2026-MAR-19';
 
-    mockData[0].upsetChance = simulate(mockData[0].xG_A, mockData[0].xG_B).toFixed(1);
-    res.json(mockData);
+        // 1. Fetch Live Games & Odds
+        const response = await axios.get(`${BASE_URL}?key=${API_KEY}`);
+        const games = response.data;
+
+        const livePredictions = games.map(game => {
+            // 2. RAW STATS (Pace & Efficiency)
+            let homeXG = game.HomeTeamAverageGoals || 3.0;
+            let awayXG = game.AwayTeamAverageGoals || 2.8;
+
+            // 3. INJURY & ROSTER CHECK (The Upset Logic)
+            // If a star is out, we shave 0.5 off their expected goals
+            if (game.HomeTeamInjuryCount > 2) homeXG -= 0.6;
+            if (game.AwayTeamInjuryCount > 2) awayXG -= 0.6;
+
+            // 4. THE GOALIE FACTOR (NHL Specific)
+            // If the backup is in, the opponent's xG goes UP
+            if (game.HomeTeamStartingGoalie === "Backup") awayXG += 0.75;
+            if (game.AwayTeamStartingGoalie === "Backup") homeXG += 0.75;
+
+            // 5. RUN THE SIMULATION (Proof of Work)
+            const upsetChance = simulate(awayXG, homeXG).toFixed(1);
+            const total = (homeXG + awayXG).toFixed(1);
+
+            // 6. FIND THE VERMEER EDGE
+            // (Your Prob vs Sportsbook Prob)
+            const impliedProb = 100 / (game.AwayTeamMoneyLine + 100) * 100;
+            const edge = (upsetChance - impliedProb).toFixed(1);
+
+            return {
+                matchup: `${game.AwayTeam} @ ${game.HomeTeam}`,
+                xG_A: awayXG,
+                xG_B: homeXG,
+                upsetChance: upsetChance,
+                total: total,
+                isVermeer: edge > 7.5, // 7.5% edge is our "Gold" threshold
+                edge: edge
+            };
+        });
+
+        res.json(livePredictions);
+    } catch (error) {
+        console.error("API Sync Error:", error);
+        res.status(500).json({ error: "Failed to fetch live roster data" });
+    }
 });
-
-app.listen(process.env.PORT || 3000);
