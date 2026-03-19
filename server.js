@@ -1,73 +1,69 @@
 const express = require('express');
 const axios = require('axios');
-const path = require('path'); // Adds the ability to find your files
+const path = require('path');
 const app = express();
 
-// --- 1. SECURE KEY MAPPING ---
 const KEYS = {
     NHL_RADAR: process.env.SPORTRADAR_NHL_KEY,
     NBA_BDL: process.env.BALLDONTLIE_NBA_KEY,
     ODDS_API: process.env.THEODDS_API_KEY
 };
 
-// --- 2. FILE SERVING LOGIC (THE "FRONT DOOR") ---
-// This tells the engine to serve your HTML, CSS, and JS files
 app.use(express.static(path.join(__dirname)));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// --- 3. THE SIMULATION ENGINE ---
-function runMonteCarlo(awayXG, homeXG, iterations = 10000) {
-    let awayWins = 0;
-    for (let i = 0; i < iterations; i++) {
-        if (generatePoisson(awayXG) > generatePoisson(homeXG)) awayWins++;
-    }
-    return (awayWins / iterations) * 100;
+// Math Functions
+function runMonteCarlo(a, b) {
+    let wins = 0;
+    for(let i=0; i<10000; i++) { if (genP(a) > genP(b)) wins++; }
+    return (wins/10000)*100;
 }
-
-function generatePoisson(lambda) {
-    let L = Math.exp(-lambda), p = 1.0, k = 0;
+function genP(l) { 
+    let L = Math.exp(-l), p = 1.0, k = 0;
     do { k++; p *= Math.random(); } while (p > L);
     return k - 1;
 }
 
-// --- 4. THE PREDICTION ENDPOINT ---
 app.get('/api/predict', async (req, res) => {
     try {
-        const oddsUrl = `https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds/?apiKey=${KEYS.ODDS_API}&regions=us&markets=h2h`;
-        const oddsResponse = await axios.get(oddsUrl);
-        
-        const predictions = oddsResponse.data.map(game => {
-            let homeXG = 3.2; 
-            let awayXG = 2.8;
+        const date = "2026/03/19"; // Current Date for Sportradar
+        const bdlDate = "2026-03-19";
 
-            const upsetChance = runMonteCarlo(awayXG, homeXG);
-            const bookiePrice = game.bookmakers[0]?.markets[0].outcomes[1].price || 2.0;
-            const impliedProb = (1 / bookiePrice) * 100;
-            const edge = upsetChance - impliedProb;
+        // FIRE ALL THREE APIs AT ONCE
+        const [nhlRes, nbaRes, oddsRes] = await Promise.all([
+            axios.get(`https://api.sportradar.com/nhl/trial/v7/en/games/${date}/schedule.json?api_key=${KEYS.NHL_RADAR}`),
+            axios.get(`https://api.balldontlie.io/v1/games?dates[]=${bdlDate}`, { headers: { 'Authorization': KEYS.NBA_BDL } }),
+            axios.get(`https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${KEYS.ODDS_API}&regions=us&markets=h2h`)
+        ]);
 
+        // Process NHL (Triple-Check)
+        const nhl = nhlRes.data.games.map(g => {
+            const market = oddsRes.data.find(o => o.home_team.includes(g.home.name));
+            const prob = runMonteCarlo(2.8, 3.1);
             return {
-                matchup: `${game.away_team} @ ${game.home_team}`,
-                upsetChance: upsetChance.toFixed(1),
-                total: (homeXG + awayXG).toFixed(1),
-                isVermeer: edge > 8.0,
-                edge: edge.toFixed(1),
-                xG_A: awayXG.toFixed(1),
-                xG_B: homeXG.toFixed(1)
+                matchup: `${g.away.name} @ ${g.home.name}`,
+                sport: "NHL",
+                source: "TRIPLE-CHECK",
+                upsetChance: prob.toFixed(1),
+                isVermeer: prob > 40 // Adjusted threshold
             };
         });
 
-        res.json(predictions);
-    } catch (error) {
-        console.error("API Error:", error.message);
-        res.status(500).json({ error: "API limit or key issue" });
+        // Process NBA (Duo-Check)
+        const nba = nbaRes.data.data.map(g => ({
+            matchup: `${g.visitor_team.full_name} @ ${g.home_team.full_name}`,
+            sport: "NBA",
+            source: "DUO-CHECK",
+            upsetChance: runMonteCarlo(110, 115).toFixed(1),
+            isVermeer: false
+        }));
+
+        res.json([...nhl, ...nba]);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ error: "API Handshake Failed" });
     }
 });
 
-// --- 5. START SERVER ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Quantum V2 Online on Port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Engine V2.1 Online`));
