@@ -1,0 +1,5 @@
+body { background: #0a0a0a; color: white; font-family: sans-serif; margin: 0; }
+header { padding: 20px; text-align: center; border-bottom: 1px solid #333; }
+h1 span { color: #ffcc00; }
+.card { background: #161616; margin: 15px; padding: 15px; border-radius: 8px; border-left: 4px solid #ffcc00; }
+.text-green { color: #39ff14; }
