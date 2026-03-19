@@ -1,50 +1,71 @@
+const express = require('express');
+const axios = require('axios');
+const app = express();
+
+// --- 1. YOUR SECURE KEYS ---
+const KEYS = {
+    NHL_RADAR: "ukJQ0R5KKhbDHKvNy1hj3iAeIaPdNmaD2TqxjeLH",
+    NBA_BDL: "7f3d9f97-3ed7-4383-912a-becaf2e6b185",
+    ODDS_API: "316f4e7f81b5a5003b3038895f55716d"
+};
+
+app.use(express.static('public'));
+
+// --- 2. MATH CORE (Monte Carlo & Poisson) ---
+function runSim(a, b) {
+    let wins = 0;
+    for(let i=0; i<10000; i++) { if (genP(a) > genP(b)) wins++; }
+    return (wins/10000)*100;
+}
+function genP(l) { 
+    let L = Math.exp(-l), p = 1.0, k = 0;
+    do { k++; p *= Math.random(); } while (p > L);
+    return k - 1;
+}
+
+// --- 3. THE PREDICTION ENDPOINT ---
 app.get('/api/predict', async (req, res) => {
     try {
-        const API_KEY = 'YOUR_ACTUAL_API_KEY_HERE';
-        const BASE_URL = 'https://api.sportsdata.io/v3/nhl/scores/json/GamesByDate/2026-MAR-19';
+        // A. GET MARKET ODDS (The Odds API)
+        const oddsRes = await axios.get(`https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds/?apiKey=${KEYS.ODDS_API}&regions=us&markets=h2h`);
+        
+        // B. GET NHL INJURIES (Sportradar)
+        // Note: In a real deploy, we'd map game IDs between APIs
+        const radarRes = await axios.get(`https://api.sportradar.com/nhl/trial/v7/en/league/injuries.json?api_key=${KEYS.NHL_RADAR}`);
 
-        // 1. Fetch Live Games & Odds
-        const response = await axios.get(`${BASE_URL}?key=${API_KEY}`);
-        const games = response.data;
+        const results = oddsRes.data.map(game => {
+            let homeXG = 3.1; // League Baseline
+            let awayXG = 2.9;
 
-        const livePredictions = games.map(game => {
-            // 2. RAW STATS (Pace & Efficiency)
-            let homeXG = game.HomeTeamAverageGoals || 3.0;
-            let awayXG = game.AwayTeamAverageGoals || 2.8;
+            // C. APPLY THE "VERMEER" LOGIC
+            // Here we would loop through radarRes.data to find injuries for these teams
+            // For now, we apply a placeholder penalty if the API finds a match
+            const homeInjuries = 2; // This would be dynamic from Sportradar
+            if (homeInjuries > 1) homeXG -= 0.45; 
 
-            // 3. INJURY & ROSTER CHECK (The Upset Logic)
-            // If a star is out, we shave 0.5 off their expected goals
-            if (game.HomeTeamInjuryCount > 2) homeXG -= 0.6;
-            if (game.AwayTeamInjuryCount > 2) awayXG -= 0.6;
-
-            // 4. THE GOALIE FACTOR (NHL Specific)
-            // If the backup is in, the opponent's xG goes UP
-            if (game.HomeTeamStartingGoalie === "Backup") awayXG += 0.75;
-            if (game.AwayTeamStartingGoalie === "Backup") homeXG += 0.75;
-
-            // 5. RUN THE SIMULATION (Proof of Work)
-            const upsetChance = simulate(awayXG, homeXG).toFixed(1);
-            const total = (homeXG + awayXG).toFixed(1);
-
-            // 6. FIND THE VERMEER EDGE
-            // (Your Prob vs Sportsbook Prob)
-            const impliedProb = 100 / (game.AwayTeamMoneyLine + 100) * 100;
-            const edge = (upsetChance - impliedProb).toFixed(1);
+            const upsetChance = runSim(awayXG, homeXG);
+            
+            // D. CALCULATE THE EDGE
+            const bookieOdds = game.bookmakers[0]?.markets[0].outcomes[1].price || 2.0;
+            const impliedProb = (1 / bookieOdds) * 100;
+            const edge = upsetChance - impliedProb;
 
             return {
-                matchup: `${game.AwayTeam} @ ${game.HomeTeam}`,
+                matchup: `${game.away_team} @ ${game.home_team}`,
+                upsetChance: upsetChance.toFixed(1),
+                total: (homeXG + awayXG).toFixed(1),
+                isVermeer: edge > 8.5,
+                edge: edge.toFixed(1),
                 xG_A: awayXG,
-                xG_B: homeXG,
-                upsetChance: upsetChance,
-                total: total,
-                isVermeer: edge > 7.5, // 7.5% edge is our "Gold" threshold
-                edge: edge
+                xG_B: homeXG
             };
         });
 
-        res.json(livePredictions);
-    } catch (error) {
-        console.error("API Sync Error:", error);
-        res.status(500).json({ error: "Failed to fetch live roster data" });
+        res.json(results);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Engine Sync Error");
     }
 });
+
+app.listen(process.env.PORT || 3000);
