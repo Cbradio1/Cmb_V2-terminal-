@@ -1,45 +1,46 @@
 qasync function loadData() {
+    const hub = document.getElementById('vermeer-alerts');
     try {
         const res = await fetch('/api/predict');
-        const data = await res.json();
-        const hub = document.getElementById('vermeer-alerts');
+        if (!res.ok) throw new Error('Network response was not ok');
         
-        if (data.length === 0) {
-            hub.innerHTML = '<div class="loading">NO LIVE DATA FOUND</div>';
+        const data = await res.json();
+        
+        if (!data || data.length === 0) {
+            hub.innerHTML = '<div class="loading">NO LIVE GAMES FOUND IN DATA STREAM</div>';
             return;
         }
 
         hub.innerHTML = data.map(game => `
             <div class="card ${game.isVermeer ? 'gold-border' : ''}">
-                <div class="card-header">
-                    <small>${game.sport} | ${game.source}</small>
-                    ${game.isVermeer ? '<span class="badge">VERMEER</span>' : ''}
+                <div style="display:flex; justify-content:space-between; font-size: 0.7rem; color: #888;">
+                    <span>${game.sport} | ${game.source}</span>
+                    ${game.isVermeer ? '<span style="color:#ffcc00; font-weight:bold;">VERMEER PICK</span>' : ''}
                 </div>
-                <h3>${game.matchup}</h3>
-                <p>Upset Probability: <span class="text-green">${game.upsetChance}%</span></p>
+                <h3 style="margin: 10px 0; font-size: 1.1rem;">${game.matchup}</h3>
+                <p style="margin: 0; font-size: 0.9rem;">Upset Prob: <span class="text-green">${game.upsetChance}%</span></p>
             </div>
         `).join('');
     } catch (e) {
-        console.error("Sync Error", e);
+        hub.innerHTML = `<div class="loading" style="color: #ff4444;">SYNC ERROR: CHECK RENDER LOGS</div>`;
+        console.error("Master Engine Sync Error:", e);
     }
 }
 
-function switchTab(tab) {
-    // UI Feedback for Tabs
+// Ensure the Hub tab is active by default
+function switchTab(tabName) {
     const buttons = document.querySelectorAll('.nav-item');
-    buttons.forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+    buttons.forEach(btn => btn.classList.remove('active'));
+    event.currentTarget.classList.add('active');
 
     const hub = document.getElementById('vermeer-alerts');
-    
-    if(tab === 'hub') {
-        hub.style.display = 'block';
+    if (tabName === 'hub') {
+        hub.innerHTML = '<div class="loading">RE-SYNCING...</div>';
         loadData();
     } else {
-        // Placeholder for Poisson/Roster until we build those engines
-        hub.innerHTML = `<div class="loading">WIRING ${tab.toUpperCase()} ENGINE...</div>`;
+        hub.innerHTML = `<div class="loading" style="color: #666;">${tabName.toUpperCase()} MODULE OFFLINE</div>`;
     }
 }
 
+// Kickstart on load
 loadData();
-setInterval(loadData, 60000);
