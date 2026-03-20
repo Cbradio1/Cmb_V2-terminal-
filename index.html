@@ -2,16 +2,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vermeer Hub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Quantum V2 Terminal</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header><h1>VERMEER<span>HUB</span></h1><div id="status">CONNECTING...</div></header>
-    <main id="vermeer-alerts"></main>
+    <header>
+        <div class="status-bar">
+            <span>SYSTEM: <span id="connection-status" class="text-green">ONLINE</span></span>
+            <span id="current-date"></span>
+        </div>
+        <h1>QUANTUM<span>V2</span></h1>
+    </header>
+
+    <main id="app-content">
+        <div id="vermeer-alerts" class="tab-content active">
+            <div class="loading">SYNCING TRIANGULATION DATA...</div>
+        </div>
+    </main>
+
     <nav class="bottom-nav">
-        <button onclick="location.reload()">REFRESH</button>
+        <button class="nav-item active" onclick="switchTab('hub')">HUB</button>
+        <button class="nav-item" onclick="switchTab('poisson')">POISSON</button>
+        <button class="nav-item" onclick="switchTab('roster')">ROSTER</button>
     </nav>
+
     <script src="app.js"></script>
 </body>
 </html>
+
