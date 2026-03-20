@@ -1,57 +1,392 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quantum V2 Terminal</title>
     <style>
-        :root { --gold: #ffcc00; --neon: #39ff14; --bg: #0a0a0a; --card: #161616; }
-        body { background: var(--bg); color: white; font-family: monospace; margin: 0; padding-bottom: 70px; }
-        header { padding: 20px; text-align: center; border-bottom: 1px solid #333; }
-        h1 span { color: var(--gold); }
-        .tab-content { display: none; padding: 15px; }
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap');
+
+        :root {
+            --gold: #ffcc00;
+            --neon: #39ff14;
+            --red: #ff3c3c;
+            --blue: #00cfff;
+            --bg: #0a0a0a;
+            --card: #111111;
+            --border: #2a2a2a;
+            --muted: #555;
+            --font-mono: 'Share Tech Mono', monospace;
+            --font-display: 'Orbitron', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: #ccc;
+            font-family: var(--font-mono);
+            padding-bottom: 70px;
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        header {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header h1 {
+            font-family: var(--font-display);
+            font-size: 1.3rem;
+            letter-spacing: 4px;
+            color: white;
+        }
+        header h1 span { color: var(--gold); }
+        #status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--muted);
+            box-shadow: none;
+            transition: background 0.4s, box-shadow 0.4s;
+        }
+        #status-dot.live {
+            background: var(--neon);
+            box-shadow: 0 0 8px var(--neon);
+            animation: pulse 2s infinite;
+        }
+        #status-dot.error { background: var(--red); }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ── TABS ── */
+        .tab-content { display: none; padding: 16px; }
         .tab-content.active { display: block; }
-        .card { background: var(--card); padding: 15px; margin-bottom: 10px; border-left: 4px solid #444; border-radius: 4px; }
-        .gold-border { border-left-color: var(--gold); box-shadow: 0 0 10px rgba(255,204,0,0.2); }
-        .nav { position: fixed; bottom: 0; width: 100%; display: flex; background: #111; border-top: 1px solid #333; }
-        .nav-btn { flex: 1; padding: 15px; border: none; background: none; color: #666; font-weight: bold; cursor: pointer; }
-        .nav-btn.active { color: var(--gold); border-top: 2px solid var(--gold); }
-        .text-green { color: var(--neon); }
+
+        .section-label {
+            font-family: var(--font-display);
+            font-size: 0.6rem;
+            letter-spacing: 5px;
+            color: var(--muted);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+        }
+
+        /* ── HUB CARDS ── */
+        .card {
+            background: var(--card);
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--border);
+            border-radius: 3px;
+            transition: border-color 0.2s;
+        }
+        .card.gold-border {
+            border-left-color: var(--gold);
+            background: #141200;
+            box-shadow: 0 0 16px rgba(255,204,0,0.08);
+        }
+        .card-meta {
+            font-size: 0.65rem;
+            color: var(--muted);
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+        }
+        .card-meta .vermeer-tag {
+            color: var(--gold);
+            margin-left: 8px;
+        }
+        .card h4 {
+            font-family: var(--font-mono);
+            font-size: 0.95rem;
+            color: white;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+        .card-stat { font-size: 0.75rem; color: #777; }
+        .card-stat span { color: var(--neon); font-size: 0.9rem; }
+        .card-stat .edge-neg { color: var(--red); }
+        .card-stat .edge-pos { color: var(--neon); }
+
+        /* ── POISSON TAB ── */
+        .poisson-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .poisson-card h4 {
+            font-size: 0.85rem;
+            color: white;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .lambda-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+        .lambda-label {
+            font-size: 0.65rem;
+            letter-spacing: 2px;
+            color: var(--muted);
+            white-space: nowrap;
+            width: 55px;
+        }
+        .lambda-bar-wrap {
+            flex: 1;
+            background: #1a1a1a;
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .lambda-bar {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.6s ease;
+        }
+        .lambda-bar.away { background: var(--blue); }
+        .lambda-bar.home { background: var(--gold); }
+        .lambda-val {
+            font-size: 0.75rem;
+            width: 32px;
+            text-align: right;
+            color: #aaa;
+        }
+        .poisson-divider {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65rem;
+            color: var(--muted);
+            letter-spacing: 1px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border);
+        }
+        .poisson-divider .win-prob { color: var(--neon); }
+        .poisson-divider .rating-edge.pos { color: var(--neon); }
+        .poisson-divider .rating-edge.neg { color: var(--red); }
+
+        /* ── ROSTER TAB ── */
+        .ratings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .rating-chip {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 10px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .rating-chip .team-name { font-size: 0.75rem; color: #aaa; }
+        .rating-chip .rating-val {
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+        .rating-chip .rating-val.above { color: var(--neon); }
+        .rating-chip .rating-val.below { color: var(--red); }
+        .rating-chip .rating-val.avg { color: var(--muted); }
+
+        /* ── EMPTY / ERROR STATES ── */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--muted);
+            font-size: 0.8rem;
+            line-height: 2;
+            letter-spacing: 1px;
+        }
+
+        /* ── NAV ── */
+        .nav {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            display: flex;
+            background: #0d0d0d;
+            border-top: 1px solid var(--border);
+            z-index: 100;
+        }
+        .nav-btn {
+            flex: 1;
+            padding: 14px 0;
+            border: none;
+            background: none;
+            color: var(--muted);
+            font-family: var(--font-display);
+            font-size: 0.5rem;
+            letter-spacing: 3px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: color 0.2s;
+            border-top: 2px solid transparent;
+        }
+        .nav-btn.active {
+            color: var(--gold);
+            border-top-color: var(--gold);
+        }
     </style>
 </head>
 <body>
-    <header><h1>QUANTUM<span>V2</span></h1></header>
+    <header>
+        <h1>QUANTUM<span>V2</span></h1>
+        <div id="status-dot" title="Engine status"></div>
+    </header>
 
-    <div id="hub" class="tab-content active"><h3>TRIANGULATION HUB</h3><div id="hub-list">Loading...</div></div>
-    <div id="poisson" class="tab-content"><h3>POISSON DEEP-DIVE</h3><p>Real-time volatility analysis active.</p></div>
-    <div id="roster" class="tab-content"><h3>ROSTER MATRIX</h3><p>Loading player-specific deltas...</p></div>
+    <!-- HUB TAB -->
+    <div id="hub" class="tab-content active">
+        <p class="section-label">Triangulation Hub</p>
+        <div id="hub-list">
+            <div class="empty-state">SYNCING ENGINE...</div>
+        </div>
+    </div>
+
+    <!-- POISSON TAB -->
+    <div id="poisson" class="tab-content">
+        <p class="section-label">Poisson Deep-Dive</p>
+        <div id="poisson-list">
+            <div class="empty-state">AWAITING DATA SYNC</div>
+        </div>
+    </div>
+
+    <!-- ROSTER TAB -->
+    <div id="roster" class="tab-content">
+        <p class="section-label">Power Ratings Matrix</p>
+        <div class="ratings-grid" id="roster-grid"></div>
+    </div>
 
     <nav class="nav">
-        <button class="nav-btn active" onclick="showTab('hub')">HUB</button>
-        <button class="nav-btn" onclick="showTab('poisson')">POISSON</button>
-        <button class="nav-btn" onclick="showTab('roster')">ROSTER</button>
+        <button class="nav-btn active" onclick="showTab(event,'hub')">HUB</button>
+        <button class="nav-btn" onclick="showTab(event,'poisson')">POISSON</button>
+        <button class="nav-btn" onclick="showTab(event,'roster')">MATRIX</button>
     </nav>
 
     <script>
-        function showTab(id) {
+        // ── TAB SWITCHING ──
+        function showTab(e, id) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(id).classList.add('active');
-            event.target.classList.add('active');
+            e.target.classList.add('active');
         }
 
+        // ── RATINGS (mirrored from server for ROSTER tab) ──
+        const NHL_RATINGS = {
+            "Rangers":1.15,"Bruins":1.10,"Panthers":1.12,"Hurricanes":1.11,
+            "Blue Jackets":0.82,"Blackhawks":0.80,"Ducks":0.84,"Sharks":0.78,
+            "Islanders":0.98,"Senators":1.02,"Jets":1.08,"Red Wings":1.01
+        };
+
+        function buildRosterTab() {
+            const grid = document.getElementById('roster-grid');
+            const sorted = Object.entries(NHL_RATINGS).sort((a,b) => b[1] - a[1]);
+            grid.innerHTML = sorted.map(([team, rating]) => {
+                const cls = rating > 1.05 ? 'above' : rating < 0.95 ? 'below' : 'avg';
+                return `
+                    <div class="rating-chip">
+                        <span class="team-name">${team.toUpperCase()}</span>
+                        <span class="rating-val ${cls}">${rating.toFixed(2)}</span>
+                    </div>`;
+            }).join('');
+        }
+
+        // ── POISSON BAR: scale lambda to a % bar (range 0.75–1.25 maps to 10%–100%) ──
+        function lambdaToBar(lambda) {
+            const min = 2.0, max = 4.2;
+            return Math.min(100, Math.max(8, ((lambda - min) / (max - min)) * 100)).toFixed(1);
+        }
+
+        // ── RENDER POISSON TAB ──
+        function renderPoisson(games) {
+            const el = document.getElementById('poisson-list');
+            if (!games.length) {
+                el.innerHTML = '<div class="empty-state">NO GAMES SCHEDULED TODAY</div>';
+                return;
+            }
+            el.innerHTML = games.map(g => {
+                const edgeCls = g.ratingEdge > 0 ? 'pos' : 'neg';
+                const edgeSign = g.ratingEdge > 0 ? '+' : '';
+                return `
+                <div class="poisson-card">
+                    <h4>${g.away} @ ${g.home}</h4>
+                    <div class="lambda-row">
+                        <div class="lambda-label">AWAY λ</div>
+                        <div class="lambda-bar-wrap">
+                            <div class="lambda-bar away" style="width:${lambdaToBar(g.awayLambda)}%"></div>
+                        </div>
+                        <div class="lambda-val">${g.awayLambda}</div>
+                    </div>
+                    <div class="lambda-row">
+                        <div class="lambda-label">HOME λ</div>
+                        <div class="lambda-bar-wrap">
+                            <div class="lambda-bar home" style="width:${lambdaToBar(g.homeLambda)}%"></div>
+                        </div>
+                        <div class="lambda-val">${g.homeLambda}</div>
+                    </div>
+                    <div class="poisson-divider">
+                        <div>AWAY WIN PROB: <span class="win-prob">${g.upsetChance}%</span></div>
+                        <div>RATING EDGE: <span class="rating-edge ${edgeCls}">${edgeSign}${g.ratingEdge}</span></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // ── RENDER HUB TAB ──
+        function renderHub(games) {
+            const el = document.getElementById('hub-list');
+            if (!games.length) {
+                el.innerHTML = '<div class="empty-state">NO GAMES SCHEDULED TODAY<br>CHECK BACK LATER</div>';
+                return;
+            }
+            el.innerHTML = games.map(g => {
+                const edgeCls = g.ratingEdge >= 0 ? 'edge-pos' : 'edge-neg';
+                const edgeSign = g.ratingEdge > 0 ? '+' : '';
+                const vermeerTag = g.isVermeer ? '<span class="vermeer-tag">◆ VERMEER</span>' : '';
+                return `
+                <div class="card ${g.isVermeer ? 'gold-border' : ''}">
+                    <div class="card-meta">
+                        ${g.sport} · ${g.source}${vermeerTag}
+                    </div>
+                    <h4>${g.matchup}</h4>
+                    <div class="card-stat">
+                        AWAY WIN PROB: <span>${g.upsetChance}%</span>
+                        &nbsp;&nbsp;
+                        EDGE: <span class="${edgeCls}">${edgeSign}${g.ratingEdge}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // ── MAIN SYNC ──
         async function sync() {
+            const dot = document.getElementById('status-dot');
             try {
                 const res = await fetch('/api/predict');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                document.getElementById('hub-list').innerHTML = data.map(g => `
-                    <div class="card ${g.isVermeer ? 'gold-border' : ''}">
-                        <small>${g.sport} | ${g.source}</small>
-                        <h4 style="margin:8px 0;">${g.matchup}</h4>
-                        <div>Upset Prob: <span class="text-green">${g.upsetChance}%</span></div>
-                    </div>
-                `).join('');
-            } catch(e) { document.getElementById('hub-list').innerText = "SYNC ERROR"; }
+
+                dot.className = 'live';
+                renderHub(data);
+                renderPoisson(data);
+            } catch (e) {
+                dot.className = 'error';
+                document.getElementById('hub-list').innerHTML =
+                    '<div class="empty-state">SYNC ERROR<br>CHECK API KEYS / NETWORK</div>';
+                document.getElementById('poisson-list').innerHTML =
+                    '<div class="empty-state">NO DATA</div>';
+            }
         }
+
+        buildRosterTab();
         sync();
     </script>
 </body>
