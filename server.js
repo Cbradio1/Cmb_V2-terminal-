@@ -28,6 +28,7 @@ app.get('/api/predict', async (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
         const radarDate = today.replace(/-/g, '/');
+        // This should result in "2026/03/19"
 
         const [nhl, nba] = await Promise.all([
             axios.get(`https://api.sportradar.com/nhl/trial/v7/en/games/${radarDate}/schedule.json?api_key=${KEYS.NHL_RADAR}`).catch(() => ({data:{games:[]}})),
