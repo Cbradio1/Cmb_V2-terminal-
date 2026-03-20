@@ -1,8 +1,29 @@
-/* Navigation Polish */
+:root {
+    --bg: #0a0a0a;
+    --card: #161616;
+    --gold: #ffcc00;
+    --neon: #39ff14;
+}
+
+body { background: var(--bg); color: white; font-family: 'Courier New', monospace; margin: 0; padding-bottom: 80px; }
+
+header { text-align: center; padding: 20px; border-bottom: 1px solid #333; }
+h1 span { color: var(--gold); }
+
+.card { 
+    background: var(--card); 
+    margin: 10px; 
+    padding: 15px; 
+    border-radius: 5px; 
+    border-left: 4px solid #444; 
+}
+.gold-border { border-left-color: var(--gold); }
+.text-green { color: var(--neon); font-weight: bold; }
+
+/* Fixed Bottom Nav */
 .bottom-nav {
     position: fixed;
     bottom: 0;
-    left: 0;
     width: 100%;
     background: #111;
     display: flex;
@@ -13,21 +34,17 @@
 
 .nav-item {
     background: none;
-    border: none;
-    color: #666;
+    border: 1px solid #444;
+    color: #888;
+    padding: 8px 15px;
     font-family: 'Courier New', monospace;
-    font-size: 0.8rem;
-    font-weight: bold;
     cursor: pointer;
 }
 
 .nav-item.active {
     color: var(--gold);
-    text-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+    border-color: var(--gold);
+    box-shadow: 0 0 10px rgba(255, 204, 0, 0.3);
 }
 
-.card {
-    border: 1px solid #222;
-    background: linear-gradient(145deg, #161616, #0f0f0f);
-    box-shadow: 5px 5px 15px #050505;
-}
+.badge { background: var(--gold); color: black; font-size: 0.7rem; padding: 2px 5px; font-weight: bold; }
