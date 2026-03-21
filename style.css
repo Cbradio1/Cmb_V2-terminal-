@@ -1,490 +1,69 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>Quantum V2 Terminal</title>
-  <style>
-    /* ── BASE ── */
-    :root {
-      --gold:   #ffcc00;
-      --neon:   #39ff14;
-      --red:    #ff4444;
-      --cyan:   #00d4ff;
-      --purple: #a855f7;
-      --bg:     #0a0a0a;
-      --card:   #111;
-      --border: #1e1e1e;
-      --dim:    #555;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: #ccc;
-      font-family: 'Courier New', monospace;
-      padding-bottom: 65px;
-      min-height: 100vh;
-    }
-
-    /* ── HEADER ── */
-    header {
-      padding: 14px 16px 10px;
-      border-bottom: 1px solid #222;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #0d0d0d;
-    }
-    header h1 { font-size: 18px; letter-spacing: 3px; color: #fff; }
-    header h1 span { color: var(--gold); }
-    #status-bar { font-size: 10px; color: var(--dim); text-align: right; line-height: 1.6; }
-    #live-dot { display: inline-block; width: 6px; height: 6px; background: var(--neon);
-      border-radius: 50%; margin-right: 4px; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
-
-    /* ── LEAGUE FILTER ── */
-    #league-bar {
-      display: flex; gap: 6px; padding: 10px 12px;
-      background: #0d0d0d; border-bottom: 1px solid #1a1a1a;
-      overflow-x: auto; scrollbar-width: none;
-    }
-    .league-btn {
-      padding: 4px 12px; border-radius: 3px; font-family: monospace; font-size: 10px;
-      font-weight: bold; letter-spacing: 1px; cursor: pointer; white-space: nowrap;
-      border: 1px solid #333; background: transparent; color: var(--dim);
-      transition: all .2s;
-    }
-    .league-btn.active { border-color: var(--gold); color: var(--gold); background: rgba(255,204,0,.08); }
-
-    /* ── TABS ── */
-    .tab-content { display: none; padding: 12px; }
-    .tab-content.active { display: block; }
-
-    /* ── CARDS ── */
-    .card {
-      background: var(--card); border: 1px solid var(--border);
-      border-left: 3px solid #333; border-radius: 4px;
-      padding: 12px 14px; margin-bottom: 10px;
-    }
-    .card.upset-prime { border-left-color: var(--gold); box-shadow: 0 0 12px rgba(255,204,0,.15); }
-    .card.upset-watch { border-left-color: var(--neon);  box-shadow: 0 0 8px  rgba(57,255,20,.1); }
-    .card.neutral     { border-left-color: var(--cyan); }
-    .card.favor       { border-left-color: var(--dim); }
-
-    .matchup-name { font-size: 14px; font-weight: bold; color: #fff; margin: 6px 0 4px; }
-    .sub { font-size: 10px; color: var(--dim); letter-spacing: 1px; }
-    .tier-badge {
-      display: inline-block; font-size: 9px; font-weight: bold; letter-spacing: 2px;
-      padding: 3px 8px; border-radius: 2px; margin-left: 8px;
-    }
-    .tier-PRIME { background: rgba(255,204,0,.15); color: var(--gold); border: 1px solid rgba(255,204,0,.3); }
-    .tier-WATCH { background: rgba(57,255,20,.1);  color: var(--neon);  border: 1px solid rgba(57,255,20,.2); }
-    .tier-NEUTRAL { background: rgba(0,212,255,.1); color: var(--cyan); border: 1px solid rgba(0,212,255,.2); }
-    .tier-FAVOR   { background: rgba(85,85,85,.2);  color: var(--dim);  border: 1px solid #333; }
-
-    /* ── STAT ROW ── */
-    .stat-row { display: flex; justify-content: space-between; margin-top: 8px; gap: 8px; flex-wrap: wrap; }
-    .stat-box { flex: 1; min-width: 80px; background: #0d0d0d; border: 1px solid #1a1a1a;
-      border-radius: 3px; padding: 6px 8px; text-align: center; }
-    .stat-val { font-size: 15px; font-weight: bold; margin-top: 2px; }
-    .stat-lbl { font-size: 8px; color: var(--dim); letter-spacing: 1px; }
-
-    /* ── UPSET SCORE BAR ── */
-    .score-bar-wrap { margin-top: 10px; }
-    .score-bar-track { height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
-    .score-bar-fill  { height: 100%; border-radius: 3px; transition: width .6s; }
-    .score-bar-label { display: flex; justify-content: space-between; margin-top: 4px; }
-    .score-bar-label span { font-size: 9px; color: var(--dim); }
-
-    /* ── SIGNAL LAYERS ── */
-    .signal-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 7px 0; border-bottom: 1px solid #161616; font-size: 11px;
-    }
-    .signal-row:last-child { border-bottom: none; }
-    .sig-icon { font-size: 12px; width: 16px; text-align: center; }
-    .sig-layer { flex: 1; color: #888; font-size: 10px; letter-spacing: 1px; }
-    .sig-note  { font-size: 10px; color: var(--dim); flex: 2; }
-    .sig-badge { width: 70px; text-align: center; padding: 2px 6px; border-radius: 2px;
-      font-size: 9px; font-weight: bold; letter-spacing: 1px; }
-    .sig-up   { background: rgba(57,255,20,.12);  color: var(--neon); border: 1px solid rgba(57,255,20,.2); }
-    .sig-down { background: rgba(255,68,68,.12);  color: var(--red);  border: 1px solid rgba(255,68,68,.2); }
-    .sig-neut { background: rgba(85,85,85,.15);   color: var(--dim);  border: 1px solid #333; }
-
-    /* ── MC BARS ── */
-    .mc-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
-    .mc-bar-label { width: 60px; color: var(--dim); font-size: 10px; }
-    .mc-bar-track { flex: 1; height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; }
-    .mc-bar-fill  { height: 100%; border-radius: 4px; }
-
-    /* ── SCORE MATRIX ── */
-    .matrix-scroll { overflow-x: auto; margin-top: 10px; }
-    table { border-collapse: collapse; width: 100%; font-size: 10px; }
-    th, td { border: 1px solid #1a1a1a; padding: 4px 6px; text-align: center; }
-    th { color: var(--gold); background: #111; }
-    td { color: #888; }
-    td.top-score { color: var(--neon); background: rgba(57,255,20,.06); }
-
-    /* ── KELLY BOX ── */
-    .kelly-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
-    .kelly-cell { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 3px;
-      padding: 8px; text-align: center; }
-    .kelly-val { font-size: 18px; font-weight: bold; margin-top: 2px; }
-
-    /* ── SECTION HEADER ── */
-    .sec-header {
-      font-size: 10px; letter-spacing: 3px; color: var(--gold);
-      border-bottom: 1px solid #1a1a1a; padding-bottom: 8px;
-      margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
-    }
-    .sec-header::before { content: ''; display: inline-block; width: 3px; height: 12px;
-      background: var(--gold); border-radius: 2px; }
-
-    /* ── EMPTY / ERROR ── */
-    .state-msg { text-align: center; padding: 40px 20px; color: var(--dim); font-size: 12px; }
-    .err { color: var(--red); }
-
-    /* ── BOTTOM NAV ── */
-    .nav {
-      position: fixed; bottom: 0; width: 100%;
-      display: flex; background: #0d0d0d;
-      border-top: 1px solid #222; z-index: 100;
-      overflow-x: auto; scrollbar-width: none;
-    }
-    .nav-btn {
-      flex: 1; min-width: 70px; padding: 12px 6px 10px; border: none;
-      background: none; color: var(--dim); cursor: pointer;
-      font-family: monospace; font-size: 8px; font-weight: bold;
-      letter-spacing: 1px; line-height: 1.4; text-align: center;
-      border-top: 2px solid transparent; transition: all .2s;
-    }
-    .nav-btn .nav-icon { font-size: 14px; display: block; }
-    .nav-btn.active { color: var(--gold); border-top-color: var(--gold); }
-
-    /* ── REFRESH BTN ── */
-    #refresh-btn {
-      display: block; width: calc(100% - 24px); margin: 0 12px 12px;
-      padding: 10px; background: transparent; border: 1px solid #333;
-      color: var(--dim); font-family: monospace; font-size: 10px;
-      letter-spacing: 2px; cursor: pointer; border-radius: 3px; transition: all .2s;
-    }
-    #refresh-btn:hover { border-color: var(--gold); color: var(--gold); }
-    #refresh-btn.loading { color: var(--gold); border-color: var(--gold);
-      animation: pulse 1s infinite; }
-
-    /* ── SCROLLBAR ── */
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: #0a0a0a; }
-    ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
-  </style>
-</head>
-<body>
-
-<!-- HEADER -->
-<header>
-  <h1>QUANTUM<span>V2</span></h1>
-  <div id="status-bar">
-    <span id="live-dot"></span><span id="live-label">SYNCING</span><br>
-    <span id="last-sync">--</span>
-  </div>
-</header>
-
-<!-- LEAGUE FILTER -->
-<div id="league-bar">
-  <button class="league-btn active" data-league="all">ALL</button>
-  <button class="league-btn" data-league="nba">NBA</button>
-  <button class="league-btn" data-league="nfl">NFL</button>
-  <button class="league-btn" data-league="nhl">NHL</button>
-  <button class="league-btn" data-league="mlb">MLB</button>
-</div>
-
-<!-- ── TAB CONTENTS ── -->
-
-<!-- 1. TRIANGULATION HUB -->
-<div id="tab-hub" class="tab-content active">
-  <div class="sec-header">TRIANGULATION HUB</div>
-  <div id="hub-list"><div class="state-msg">Initializing engine...</div></div>
-</div>
-
-<!-- 2. POISSON DEEP-DIVE -->
-<div id="tab-poisson" class="tab-content">
-  <div class="sec-header">POISSON DEEP-DIVE</div>
-  <div id="poisson-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 3. MONTE CARLO -->
-<div id="tab-mc" class="tab-content">
-  <div class="sec-header">MONTE CARLO — 10,000 RUNS</div>
-  <div id="mc-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 4. SIGNAL LAYERS -->
-<div id="tab-signals" class="tab-content">
-  <div class="sec-header">10-LAYER SIGNAL ENGINE</div>
-  <div id="signal-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 5. POWER RATINGS -->
-<div id="tab-power" class="tab-content">
-  <div class="sec-header">POWER RATING MATRIX</div>
-  <div id="power-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 6. ODDS MOVEMENT -->
-<div id="tab-odds" class="tab-content">
-  <div class="sec-header">ODDS MOVEMENT TRACKER</div>
-  <div id="odds-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 7. KELLY -->
-<div id="tab-kelly" class="tab-content">
-  <div class="sec-header">KELLY CRITERION SIZING</div>
-  <div id="kelly-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 8. ANOMALY -->
-<div id="tab-anomaly" class="tab-content">
-  <div class="sec-header">ANOMALY DETECTOR</div>
-  <div id="anomaly-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 9. SENTIMENT -->
-<div id="tab-sentiment" class="tab-content">
-  <div class="sec-header">PUBLIC SENTIMENT MONITOR</div>
-  <div id="sentiment-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<!-- 10. RISK SCORE -->
-<div id="tab-risk" class="tab-content">
-  <div class="sec-header">RISK SCORE CHECKLIST</div>
-  <div id="risk-list"><div class="state-msg">Load data first</div></div>
-</div>
-
-<button id="refresh-btn" onclick="sync()">⟳ REFRESH ENGINE</button>
-
-<!-- BOTTOM NAV -->
-<nav class="nav">
-  <button class="nav-btn active" onclick="showTab('hub',this)">
-    <span class="nav-icon">◈</span>HUB
-  </button>
-  <button class="nav-btn" onclick="showTab('poisson',this)">
-    <span class="nav-icon">∿</span>POISSON
-  </button>
-  <button class="nav-btn" onclick="showTab('mc',this)">
-    <span class="nav-icon">⊞</span>MONTE C
-  </button>
-  <button class="nav-btn" onclick="showTab('signals',this)">
-    <span class="nav-icon">⚡</span>SIGNALS
-  </button>
-  <button class="nav-btn" onclick="showTab('power',this)">
-    <span class="nav-icon">◉</span>POWER
-  </button>
-  <button class="nav-btn" onclick="showTab('odds',this)">
-    <span class="nav-icon">⟳</span>ODDS
-  </button>
-  <button class="nav-btn" onclick="showTab('kelly',this)">
-    <span class="nav-icon">◑</span>KELLY
-  </button>
-  <button class="nav-btn" onclick="showTab('anomaly',this)">
-    <span class="nav-icon">⚠</span>ANOMALY
-  </button>
-  <button class="nav-btn" onclick="showTab('sentiment',this)">
-    <span class="nav-icon">◌</span>SENT
-  </button>
-  <button class="nav-btn" onclick="showTab('risk',this)">
-    <span class="nav-icon">✓</span>RISK
-  </button>
-</nav>
-
-<script>
-// ── STATE ──────────────────────────────────────────────────────
-let ALL_GAMES  = [];
-let activeLeague = 'all';
-
-// ── TAB SWITCHING ──────────────────────────────────────────────
-function showTab(id, btn) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  if (btn) btn.classList.add('active');
-  renderActiveTab(id);
+:root {
+  --gold: #ffcc00;
+  --neon: #39ff14;
+  --red: #ff4444;
+  --bg: #0a0a0a;
+  --card: #111;
+  --border: #1e1e1e;
+  --dim: #555;
 }
 
-function renderActiveTab(id) {
-  const games = filteredGames();
-  switch(id) {
-    case 'hub':       renderHub(games);       break;
-    case 'poisson':   renderPoisson(games);   break;
-    case 'mc':        renderMC(games);        break;
-    case 'signals':   renderSignals(games);   break;
-    case 'power':     renderPower(games);     break;
-    case 'odds':      renderOdds(games);      break;
-    case 'kelly':     renderKelly(games);     break;
-    case 'anomaly':   renderAnomaly(games);   break;
-    case 'sentiment': renderSentiment(games); break;
-    case 'risk':      renderRisk(games);      break;
-  }
+body {
+  background: var(--bg);
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  margin: 0;
+  padding-bottom: 70px;
 }
 
-// ── LEAGUE FILTER ──────────────────────────────────────────────
-document.querySelectorAll('.league-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.league-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activeLeague = btn.dataset.league;
-    const current = document.querySelector('.tab-content.active')?.id.replace('tab-','');
-    if (current) renderActiveTab(current);
-  });
-});
-
-function filteredGames() {
-  if (activeLeague === 'all') return ALL_GAMES;
-  return ALL_GAMES.filter(g => g.sport?.includes(activeLeague));
+header {
+  padding: 15px;
+  background: #0d0d0d;
+  border-bottom: 1px solid #222;
+  text-align: center;
 }
 
-// ── HELPERS ────────────────────────────────────────────────────
-function tierClass(tier) {
-  if (!tier) return 'neutral';
-  if (tier.includes('PRIME')) return 'upset-prime';
-  if (tier.includes('WATCH')) return 'upset-watch';
-  if (tier.includes('FAVOR')) return 'favor';
-  return 'neutral';
-}
-function tierKey(tier) {
-  if (!tier) return 'NEUTRAL';
-  if (tier.includes('PRIME')) return 'PRIME';
-  if (tier.includes('WATCH')) return 'WATCH';
-  if (tier.includes('FAVOR')) return 'FAVOR';
-  return 'NEUTRAL';
-}
-function scoreColor(v) {
-  if (v >= 75) return 'var(--gold)';
-  if (v >= 62) return 'var(--neon)';
-  if (v >= 45) return 'var(--cyan)';
-  return 'var(--dim)';
-}
-function fmt(v, dec=1) { return (v==null||isNaN(v)) ? '--' : Number(v).toFixed(dec); }
-function fmtML(ml) {
-  if (ml == null) return '--';
-  return ml > 0 ? '+' + ml : '' + ml;
-}
-function noData(el) {
-  el.innerHTML = '<div class="state-msg">No games found for this filter.</div>';
+header h1 { font-size: 20px; letter-spacing: 4px; color: #fff; }
+header h1 span { color: var(--gold); }
+
+.tab-content { display: none; padding: 12px; }
+.tab-content.active { display: block; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--dim);
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 12px;
 }
 
-// ── UPSET SCORE BAR ────────────────────────────────────────────
-function scoreBar(score) {
-  const col = scoreColor(score);
-  return `
-    <div class="score-bar-wrap">
-      <div class="score-bar-track">
-        <div class="score-bar-fill" style="width:${score}%;background:${col}"></div>
-      </div>
-      <div class="score-bar-label">
-        <span>UPSET SCORE</span>
-        <span style="color:${col};font-weight:bold">${fmt(score)}%</span>
-      </div>
-    </div>`;
+.card.upset-prime { border-left-color: var(--gold); box-shadow: 0 0 10px rgba(255,204,0,0.1); }
+
+.stat-row { display: flex; justify-content: space-between; margin-top: 10px; text-align: center; }
+.stat-box { flex: 1; background: #080808; margin: 0 4px; padding: 8px; border-radius: 3px; }
+.stat-val { font-size: 14px; font-weight: bold; color: var(--neon); }
+.stat-lbl { font-size: 8px; color: var(--dim); letter-spacing: 1px; }
+
+.nav {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  background: #0d0d0d;
+  border-top: 1px solid #222;
+  height: 65px;
 }
 
-// ── 1. HUB ─────────────────────────────────────────────────────
-function renderHub(games) {
-  const el = document.getElementById('hub-list');
-  if (!games.length) { noData(el); return; }
-  el.innerHTML = games.map(g => `
-    <div class="card ${tierClass(g.tier)}">
-      <div class="sub">${g.sport?.replace('basketball_','').replace('americanfootball_','').replace('icehockey_','').toUpperCase() || ''} · ${g.bookmaker}</div>
-      <div class="matchup-name">
-        ${g.matchup}
-        <span class="tier-badge tier-${tierKey(g.tier)}">${g.tier}</span>
-      </div>
-      <div class="stat-row">
-        <div class="stat-box">
-          <div class="stat-lbl">DOG</div>
-          <div class="stat-val" style="color:var(--neon);font-size:12px">${g.dogTeam?.split(' ').pop()}</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-lbl">MC WIN%</div>
-          <div class="stat-val" style="color:${scoreColor(g.monteCarlo?.winRate)}">${fmt(g.monteCarlo?.winRate)}%</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-lbl">MARKET%</div>
-          <div class="stat-val" style="color:var(--dim)">${fmt(g.impliedDogProb)}%</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-lbl">EDGE</div>
-          <div class="stat-val" style="color:${g.kelly?.edge>0?'var(--neon)':'var(--red)'}">${g.kelly?.edge > 0 ? '+' : ''}${fmt(g.kelly?.edge)}%</div>
-        </div>
-      </div>
-      ${scoreBar(g.upsetScore)}
-    </div>
-  `).join('');
+.nav-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: bold;
+  cursor: pointer;
 }
 
-// ── 2. POISSON ─────────────────────────────────────────────────
-function renderPoisson(games) {
-  const el = document.getElementById('poisson-list');
-  if (!games.length) { noData(el); return; }
-  el.innerHTML = games.map(g => `
-    <div class="card ${tierClass(g.tier)}">
-      <div class="matchup-name">${g.matchup}</div>
-      <div class="stat-row">
-        <div class="stat-box">
-          <div class="stat-lbl">λ HOME</div>
-          <div class="stat-val" style="color:var(--gold)">${fmt(g.lambdas?.home)}</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-lbl">λ AWAY</div>
-          <div class="stat-val" style="color:var(--cyan)">${fmt(g.lambdas?.away)}</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-lbl">HOME WIN%</div>
-          <div class="stat-val" style="color:var(--gold)">${fmt(g.poisson?.homeWinProb)}%</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-lbl">AWAY WIN%</div>
-          <div class="stat-val" style="color:var(--cyan)">${fmt(g.poisson?.awayWinProb)}%</div>
-        </div>
-      </div>
-      <div style="margin-top:10px;font-size:9px;color:var(--dim);letter-spacing:1px">TOP SCORE PROBABILITIES</div>
-      <div class="matrix-scroll">
-        <table>
-          <tr><th>HOME</th><th>AWAY</th><th>PROB %</th></tr>
-          ${(g.poisson?.topScores||[]).slice(0,8).map((s,i) => `
-            <tr>
-              <td class="${i<3?'top-score':''}">${s.scoreA}</td>
-              <td class="${i<3?'top-score':''}">${s.scoreB}</td>
-              <td class="${i<3?'top-score':''}">${(s.prob*100).toFixed(3)}%</td>
-            </tr>
-          `).join('')}
-        </table>
-      </div>
-    </div>
-  `).join('');
-}
+.nav-btn.active { color: var(--gold); border-top: 2px solid var(--gold); }
 
-// ── 3. MONTE CARLO ─────────────────────────────────────────────
-function renderMC(games) {
-  const el = document.getElementById('mc-list');
-  if (!games.length) { noData(el); return; }
-  el.innerHTML = games.map(g => {
-    const mc = g.monteCarlo || {};
-    return `
-    <div class="card ${tierClass(g.tier)}">
-      <div class="matchup-name">${g.matchup}</div>
-      <div class="sub">DOG: ${g.dogTeam} · λ=${fmt(g.lambdas?.dog)} | FAV: ${g.favTeam} · λ=${fmt(g.lambdas?.fav)} | SPREAD: ${g.spread}</div>
-      <div style="margin:12px 0 6px">
-        <div class="mc-bar-row">
-          <div class="mc-bar-label">DOG WINS</div>
-          <div class="mc-bar-track"><div class="mc-bar-fill" style="width:${mc.winRate}%;background:var(--neon)"></div></div>
-          <span style="font-size:11px;color:var(--neon);width:48px;text-align:right">${fmt(mc.winRate)}%</span>
-        </div>
-        <div class="mc-bar-row">
-          <div class="mc-bar-label">PUSH</div>
-          <div class="mc-bar-track"><div class="mc-bar-fill" style="width:${mc.pushRate}%;background:var(--gold)"></div></div>
-          <span style="font-size:11px;color:var(--gold);width:48px;text-align:right">${fmt(mc.pushRate)}%</span>
-        </div>
-        <div class="mc-bar-row">
-          <div class="mc-bar-label">FAV HOLDS</div>
-          <div class="mc-bar-track"><div class="mc-bar-fill" style="width:${mc.lossRate}%;background:var(--red)"></div></div>
-          <span style="font-size:11px;color:var(--red);width:48px;te
