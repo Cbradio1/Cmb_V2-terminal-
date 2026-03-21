@@ -76,3 +76,36 @@ app.get('/api/predict', async (req, res) => {
 
 app.listen(PORT, () => console.log(`Quantum V2 Online on ${PORT}`));
 
+// Add these to your existing configuration in server.js
+function calculateRLM(openingSpread, currentSpread, publicPct) {
+    const move = currentSpread - openingSpread;
+    // RLM Trigger: Public is >65% on one side, but line moves toward the OTHER side.
+    const isRLM = (publicPct > 65 && move < 0) || (publicPct < 35 && move > 0);
+    return {
+        move: move.toFixed(1),
+        isRLM: isRLM,
+        heat: Math.abs(move) * (isRLM ? 2 : 1) // Double the "heat" if it's reverse movement
+    };
+}
+
+app.get('/api/predict', async (req, res) => {
+    try {
+        // ... previous API fetches (Sportradar, BDL, Odds) ...
+
+        const processedGames = games.map(g => {
+            // Mocking opening spread for logic - in production, store 1st poll in a DB
+            const openingSpread = g.spread + (Math.random() > 0.5 ? 0.5 : -0.5); 
+            const rlm = calculateRLM(openingSpread, g.spread, g.publicPct);
+
+            return {
+                ...g,
+                rlm: rlm,
+                heatIndex: rlm.heat.toFixed(1)
+            };
+        });
+
+        res.json({ games: processedGames });
+    } catch (err) { /* error handling */ }
+});
+
+
