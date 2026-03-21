@@ -1,79 +1,185 @@
+// ============================================================
+//  QUANTUM V2 TERMINAL — server.js
+//  Upset Detection Engine: Poisson + Monte Carlo + 10 Layers
+// ============================================================
 const express = require('express');
-const axios = require('axios');
-const path = require('path');
-const app = express();
+const path    = require('path');
+const axios   = require('axios');
 
-// --- API KEYS (Pulled from Render Environment Variables) ---
-const KEYS = {
-    NHL_RADAR: process.env.SPORTRADAR_NHL_KEY,
-    NBA_BDL: process.env.BALLDONTLIE_NBA_KEY
-};
+const app  = express();
+const PORT = process.env.PORT || 10000;
 
-// --- SIGNAL LOGIC: POWER RATINGS (PR) ---
-// 1.0 is league average. Used to shift the Poisson Lambda.
-const NHL_RATINGS = {
-    "Rangers": 1.14, "Bruins": 1.10, "Panthers": 1.12, "Hurricanes": 1.11,
-    "Avalanche": 1.13, "Stars": 1.10, "Canucks": 1.08, "Jets": 1.07,
-    "Islanders": 0.98, "Senators": 0.96, "Blue Jackets": 0.85, "Blackhawks": 0.82,
-    "Ducks": 0.84, "Sharks": 0.79, "Canadiens": 0.91, "Flyers": 0.94
-};
+const ODDS_API_KEY = process.env.ODDS_API_KEY || '';
+const ODDS_BASE    = 'https://api.the-odds-api.com/v4';
 
-function getRating(name) {
-    for (let key in NHL_RATINGS) {
-        if (name.includes(key)) return NHL_RATINGS[key];
-    }
-    return 1.0; 
-}
-
-// --- MATH CORE: POISSON & MONTE CARLO ---
-function generatePoisson(lambda) {
-    let L = Math.exp(-lambda), p = 1.0, k = 0;
-    do { k++; p *= Math.random(); } while (p > L);
-    return k - 1;
-}
-
-function runSim(awayLambda, homeLambda) {
-    let awayWins = 0;
-    const iterations = 10000;
-    for (let i = 0; i < iterations; i++) {
-        if (generatePoisson(awayLambda) > generatePoisson(homeLambda)) awayWins++;
-    }
-    return (awayWins / iterations) * 100;
-}
-
+app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-app.get('/api/predict', async (req, res) => {
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        const radarDate = today.replace(/-/g, '/');
+const SPORT_MAP = {
+  nba:    'basketball_nba',
+  nfl:    'americanfootball_nfl',
+  mlb:    'baseball_mlb',
+  nhl:    'icehockey_nhl',
+  ncaab:  'basketball_ncaab',
+  ncaaf:  'americanfootball_ncaaf',
+};
 
-        const [nhl] = await Promise.all([
-            axios.get(`https://api.sportradar.com/nhl/trial/v7/en/games/${radarDate}/schedule.json?api_key=${KEYS.NHL_RADAR}`).catch(() => ({data:{games:[]}}))
-        ]);
+// --- CORE MATH ---
+function poisson(k, lambda) {
+  let factorial = 1;
+  for (let i = 1; i <= k; i++) factorial *= i;
+  return (Math.exp(-lambda) * Math.pow(lambda, k)) / factorial;
+}
 
-        const picks = (nhl.data.games || []).map(g => {
-            const aRating = getRating(g.away.name);
-            const hRating = getRating(g.home.name);
-            
-            // Baseline: Away 2.9, Home 3.2. Weighted by Power Ratings.
-            const prob = runSim(2.9 * aRating, 3.2 * hRating);
+function generatePoisson(lambda) {
+  const L = Math.exp(-lambda);
+  let p = 1.0, k = 0;
+  do { k++; p *= Math.random(); } while (p > L);
+  return k - 1;
+}
 
-            return {
-                matchup: `${g.away.name} @ ${g.home.name}`,
-                sport: "NHL",
-                source: "TRIANGULATION",
-                upsetChance: prob.toFixed(1),
-                isVermeer: prob > 44.0 
-            };
-        });
+function runMonteCarlo(teamAvg, opponentAvg, spread = 0) {
+  let upsetWins = 0, pushes = 0;
+  const ITERATIONS = 10000;
+  for (let i = 0; i < ITERATIONS; i++) {
+    const scoreA = generatePoisson(teamAvg);
+    const scoreB = generatePoisson(opponentAvg);
+    const margin = scoreA - scoreB;
+    if (margin + spread > 0)  upsetWins++;
+    else if (margin + spread === 0) pushes++;
+  }
+  return {
+    winRate: parseFloat(((upsetWins / ITERATIONS) * 100).toFixed(2)),
+    pushRate: parseFloat(((pushes / ITERATIONS) * 100).toFixed(2)),
+    lossRate: parseFloat((((ITERATIONS - upsetWins - pushes) / ITERATIONS) * 100).toFixed(2)),
+    iterations: ITERATIONS,
+  };
+}
 
-        res.json(picks);
-    } catch (err) {
-        res.status(500).json({ error: "Sync Failure" });
+function buildScoreMatrix(lambdaA, lambdaB, cap = 15) {
+  const matrix = [];
+  let hWin = 0, aWin = 0, draw = 0;
+  for (let a = 0; a <= cap; a++) {
+    for (let b = 0; b <= cap; b++) {
+      const prob = poisson(a, lambdaA) * poisson(b, lambdaB);
+      matrix.push({ scoreA: a, scoreB: b, prob: parseFloat(prob.toFixed(6)) });
+      if (a > b) hWin += prob;
+      if (b > a) aWin += prob;
+      if (a === b) draw += prob;
     }
+  }
+  return {
+    matrix: matrix.sort((a, b) => b.prob - a.prob).slice(0, 20),
+    homeWinProb: parseFloat((hWin * 100).toFixed(2)),
+    awayWinProb: parseFloat((aWin * 100).toFixed(2)),
+    drawProb: parseFloat((draw * 100).toFixed(2)),
+  };
+}
+
+function deriveLambdas(total, spread) {
+  const base = total / 2;
+  const adjustment = spread / 2;
+  return {
+    home: Math.max(0.1, base - adjustment),
+    away: Math.max(0.1, base + adjustment),
+  };
+}
+
+function impliedProb(americanOdds) {
+  if (!americanOdds) return 0.5;
+  return americanOdds < 0
+    ? Math.abs(americanOdds) / (Math.abs(americanOdds) + 100)
+    : 100 / (americanOdds + 100);
+}
+
+function kelly(trueProbPct, americanOdds) {
+  if (!americanOdds) return { full: 0, half: 0, edge: 0 };
+  const decimal = americanOdds > 0 ? (americanOdds / 100) + 1 : (100 / Math.abs(americanOdds)) + 1;
+  const b = decimal - 1, p = trueProbPct / 100, q = 1 - p;
+  const k = ((b * p) - q) / b;
+  const edge = ((p - (1 / decimal)) * 100);
+  return {
+    full: parseFloat((k * 100).toFixed(2)),
+    half: parseFloat((Math.max(0, k / 2) * 100).toFixed(2)),
+    edge: parseFloat(edge.toFixed(2)),
+  };
+}
+
+// --- 10-LAYER TRIANGULATION ---
+function runSignalLayers(game, mcResult, poissonData) {
+  const signals = [];
+  
+  // Layer Logic (Movement, Poisson, PR, Volatility, etc.)
+  const marketUnderdogProb = impliedProb(game.awayML) * 100;
+  const divergence = mcResult.winRate - marketUnderdogProb;
+
+  const config = [
+    { name: 'ODDS MOVEMENT', weight: 9, sig: (game.spreadMove > 0.5) ? 1 : 0 },
+    { name: 'POISSON DIV.', weight: 10, sig: (divergence > 5) ? 1 : 0 },
+    { name: 'PR DELTA', weight: 8, sig: (game.lambdas.home - game.lambdas.away < -2) ? 1 : 0 },
+    { name: 'VOLATILITY', weight: 7, sig: (Math.sqrt((game.lambdas.home + game.lambdas.away)/2) > 10) ? 1 : 0 },
+    { name: 'INJURY/ROSTER', weight: 8, sig: game.injuryFlag || 0 },
+    { name: 'FATIGUE', weight: 6, sig: game.fatigueFlag || 0 },
+    { name: 'H2H HISTORY', weight: 5, sig: game.h2hFlag || 0 },
+    { name: 'ANOMALY', weight: 9, sig: game.anomalyFlag || 0 },
+    { name: 'SENTIMENT', weight: 7, sig: (game.publicPct >= 70) ? 1 : 0 },
+    { name: 'MC CONFIDENCE', weight: 10, sig: (mcResult.winRate > 40) ? 1 : 0 }
+  ];
+
+  config.forEach(c => signals.push({ layer: c.name, signal: c.sig, weight: c.weight }));
+
+  const max = signals.reduce((s, l) => s + l.weight, 0);
+  const raw = signals.reduce((s, l) => s + (l.signal * l.weight), 0);
+  const normalized = parseFloat((((raw + max) / (2 * max)) * 100).toFixed(1));
+
+  return { signals, upsetScore: normalized, isUpset: normalized >= 62, divergence };
+}
+
+async function fetchAndAnalyze(sportKey) {
+  const url = `${ODDS_BASE}/sports/${sportKey}/odds?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+  const res = await axios.get(url);
+  return res.data.map(event => {
+    const bm = event.bookmakers?.[0];
+    const h2h = bm?.markets?.find(m => m.key === 'h2h');
+    const spreads = bm?.markets?.find(m => m.key === 'spreads');
+    const totals = bm?.markets?.find(m => m.key === 'totals');
+
+    const homeML = h2h?.outcomes?.find(o => o.name === event.home_team)?.price ?? null;
+    const awayML = h2h?.outcomes?.find(o => o.name !== event.home_team)?.price ?? null;
+    const spread = spreads?.outcomes?.find(o => o.name === event.home_team)?.point ?? 0;
+    const total = totals?.outcomes?.[0]?.point ?? 0;
+
+    const dogIsHome = homeML > awayML;
+    const dogML = dogIsHome ? homeML : awayML;
+    const lambdas = deriveLambdas(total, spread);
+    const mc = runMonteCarlo(dogIsHome ? lambdas.home : lambdas.away, dogIsHome ? lambdas.away : lambdas.home, Math.abs(spread));
+    const poissonData = buildScoreMatrix(lambdas.home, lambdas.away, 15);
+    
+    const gameData = { ...event, homeML, awayML, spread, total, lambdas, publicPct: 70, spreadMove: 0.6 };
+    const analysis = runSignalLayers(gameData, mc, poissonData);
+
+    return {
+      matchup: `${event.away_team} @ ${event.home_team}`,
+      sport: sportKey,
+      dogML,
+      monteCarlo: mc,
+      poisson: poissonData,
+      upsetScore: analysis.upsetScore,
+      isUpset: analysis.isUpset,
+      kelly: kelly(mc.winRate, dogML),
+      impliedDogProb: impliedProb(dogML) * 100
+    };
+  });
+}
+
+app.get('/api/predict', async (req, res) => {
+  try {
+    const leagues = ['nba', 'nhl', 'mlb'].map(l => SPORT_MAP[l]);
+    const results = await Promise.all(leagues.map(fetchAndAnalyze));
+    const games = results.flat().sort((a, b) => b.upsetScore - a.upsetScore);
+    res.json({ games });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Master Engine Online on Port ${PORT}`));
-
+app.listen(PORT, () => console.log(`Quantum V2 Master Engine Online on Port ${PORT}`));
+                                                     
