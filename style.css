@@ -1,771 +1,490 @@
-import { useState, useEffect, useRef } from "react";
-import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, ReferenceLine
-} from "recharts";
-
-// ─── THEME ───────────────────────────────────────────────────────────────────
-const C = {
-  bg: "#080c10",
-  panel: "#0d1117",
-  border: "#1a2332",
-  borderBright: "#1e3a5f",
-  cyan: "#00d4ff",
-  amber: "#f59e0b",
-  green: "#10b981",
-  red: "#ef4444",
-  purple: "#a855f7",
-  muted: "#4a5568",
-  text: "#c9d1d9",
-  dim: "#6e7681",
-};
-
-const mono = "'IBM Plex Mono', 'Fira Code', monospace";
-const sans = "'DM Sans', 'Outfit', sans-serif";
-
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-const GAMES = [
-  { id: 1, home: "LAL", away: "BOS", sport: "NBA", time: "7:30 PM ET", spread: -3.5, ou: 224.5 },
-  { id: 2, home: "MIL", away: "PHX", sport: "NBA", time: "9:00 PM ET", spread: +1.5, ou: 228.0 },
-  { id: 3, home: "KC",  away: "BUF", sport: "NFL", time: "8:20 PM ET", spread: -2.5, ou: 47.5 },
-];
-
-const ODDS_HISTORY = {
-  1: [
-    { t: "Mon 9A", ml: -165, spread: -3.5, ou: 222.5 },
-    { t: "Mon 3P", ml: -170, spread: -3.5, ou: 223.0 },
-    { t: "Tue 9A", ml: -162, spread: -3.0, ou: 223.5 },
-    { t: "Tue 6P", ml: -175, spread: -4.0, ou: 224.0 },
-    { t: "Wed 9A", ml: -180, spread: -4.5, ou: 224.5 },
-    { t: "Wed 3P", ml: -175, spread: -4.5, ou: 225.0 },
-    { t: "Thu 9A", ml: -168, spread: -3.5, ou: 224.5 },
-    { t: "Now",    ml: -168, spread: -3.5, ou: 224.5 },
-  ],
-};
-
-const POWER_RATINGS = [
-  { team: "BOS", off: 92, def: 88, pace: 74, sos: 82, overall: 91.2, rank: 1, trend: "+0.8" },
-  { team: "OKC", off: 89, def: 91, pace: 78, sos: 79, overall: 89.7, rank: 2, trend: "+1.2" },
-  { team: "CLE", off: 84, def: 93, pace: 68, sos: 76, overall: 88.1, rank: 3, trend: "+0.3" },
-  { team: "LAL", off: 87, def: 80, pace: 71, sos: 81, overall: 85.4, rank: 4, trend: "-0.5" },
-  { team: "DEN", off: 88, def: 79, pace: 76, sos: 74, overall: 84.9, rank: 5, trend: "+0.1" },
-  { team: "MIL", off: 85, def: 82, pace: 73, sos: 77, overall: 83.3, rank: 6, trend: "-1.1" },
-  { team: "PHX", off: 82, def: 81, pace: 72, sos: 75, overall: 81.0, rank: 7, trend: "+0.4" },
-  { team: "MIA", off: 79, def: 84, pace: 69, sos: 73, overall: 80.1, rank: 8, trend: "-0.2" },
-];
-
-const INJURIES = [
-  { player: "Jaylen Brown",    team: "BOS", pos: "SG", status: "GTD",  impact: "HIGH",   detail: "Knee soreness, limited practice" },
-  { player: "LeBron James",    team: "LAL", pos: "SF", status: "OUT",  impact: "SEVERE", detail: "Foot sprain, ruled out tonight" },
-  { player: "Anthony Davis",   team: "LAL", pos: "C",  status: "PROB", impact: "MED",    detail: "Back stiffness, expected to play" },
-  { player: "Damian Lillard",  team: "MIL", pos: "PG", status: "OUT",  impact: "SEVERE", detail: "Achilles, season-ending" },
-  { player: "Kevin Durant",    team: "PHX", pos: "SF", status: "PROB", impact: "HIGH",   detail: "Hamstring, game-time decision" },
-  { player: "Bradley Beal",    team: "PHX", pos: "SG", status: "OUT",  impact: "MED",    detail: "Personal reasons" },
-  { player: "Giannis Adetokunmpo", team: "MIL", pos: "PF", status: "ACTIVE", impact: "LOW", detail: "Full practice Thursday" },
-];
-
-const H2H = [
-  { date: "Jan 15 2025", home: "LAL", away: "BOS", score: "112-108", winner: "BOS", spread: "BOS -3", cover: "BOS", ou: 224.5, result: "O" },
-  { date: "Nov 22 2024", home: "BOS", away: "LAL", score: "126-115", winner: "BOS", spread: "BOS -5", cover: "BOS", ou: 228.0, result: "O" },
-  { date: "Mar 10 2024", home: "LAL", away: "BOS", score: "128-124", winner: "LAL", spread: "LAL -2", cover: "BOS", ou: 222.0, result: "O" },
-  { date: "Jan 28 2024", home: "BOS", away: "LAL", score: "114-105", winner: "BOS", spread: "BOS -4", cover: "BOS", ou: 225.5, result: "U" },
-  { date: "Dec 07 2023", home: "LAL", away: "BOS", score: "130-122", winner: "LAL", spread: "Even",   cover: "LAL", ou: 231.0, result: "O" },
-];
-
-const SCHEDULE = [
-  { team: "LAL", games: [
-    { opp: "@PHX", date: "Mar 17", rest: 1, b2b: true },
-    { opp: "vs BOS", date: "Mar 20", rest: 2, b2b: false },
-    { opp: "@DEN", date: "Mar 22", rest: 1, b2b: true },
-  ]},
-  { team: "BOS", games: [
-    { opp: "vs CLE", date: "Mar 18", rest: 2, b2b: false },
-    { opp: "@LAL", date: "Mar 20", rest: 1, b2b: false },
-    { opp: "vs MIL", date: "Mar 23", rest: 2, b2b: false },
-  ]},
-];
-
-const CONSENSUS = [
-  { model: "Quantum Engine v2", pick: "BOS -3.5", conf: 78, ou: "OVER", edge: "+4.2%" },
-  { model: "ELO + Regression",  pick: "BOS -3.5", conf: 71, ou: "OVER", edge: "+2.8%" },
-  { model: "Injury-Adj Model",  pick: "LAL +3.5", conf: 63, ou: "OVER", edge: "+1.1%" },
-  { model: "Market Pressure",   pick: "BOS -3.5", conf: 82, ou: "PUSH", edge: "+5.1%" },
-  { model: "Neural Net v4",     pick: "BOS -4.0", conf: 69, ou: "OVER", edge: "+3.4%" },
-  { model: "Public Fade",       pick: "LAL +3.5", conf: 58, ou: "UNDER", edge: "+0.7%" },
-];
-
-const ANOMALIES = [
-  { flag: "LINE STEAM", game: "LAL vs BOS", detail: "Spread moved 1.5 pts in 4hr window. Sharp action detected.", severity: "HIGH", time: "2h ago" },
-  { flag: "CLV ALERT",  game: "MIL vs PHX", detail: "Closing line value mismatch. Opened -1, books now -3.", severity: "MED",  time: "5h ago" },
-  { flag: "REVERSE LINE", game: "KC vs BUF", detail: "85% public on KC but line moved to BUF. Sharp fade signal.", severity: "HIGH", time: "1h ago" },
-  { flag: "INJURY DROP", game: "LAL vs BOS", detail: "LeBron OUT announced. Line moved only 1pt. May be underpriced.", severity: "MED",  time: "3h ago" },
-  { flag: "LOW VOLUME",  game: "MIL vs PHX", detail: "Unusually thin market. Spread variance ±0.8 across books.", severity: "LOW",  time: "6h ago" },
-];
-
-const SENTIMENT = [
-  { game: "LAL vs BOS", public_spread: 72, sharp_spread: 31, public_ml: 68, sharp_ml: 28, public_ou: 61, sharp_ou: 55 },
-  { game: "MIL vs PHX", public_spread: 45, sharp_spread: 52, public_ml: 44, sharp_ml: 54, public_ou: 71, sharp_ou: 48 },
-  { game: "KC vs BUF",  public_spread: 85, sharp_spread: 32, public_ml: 82, sharp_ml: 30, public_ou: 58, sharp_ou: 61 },
-];
-
-const RISK_ITEMS = [
-  { cat: "Line Value",      check: "Edge > 2%",              status: true,  weight: 20 },
-  { cat: "Sharp Action",    check: "Steam detected",         status: true,  weight: 15 },
-  { cat: "Injury Impact",   check: "No SEVERE outs on pick", status: false, weight: 20 },
-  { cat: "Model Consensus", check: ">60% models agree",     status: true,  weight: 15 },
-  { cat: "H2H Trend",       check: "ATS trend aligned",     status: true,  weight: 10 },
-  { cat: "Rest/Fatigue",    check: "No B2B disadvantage",   status: false, weight: 10 },
-  { cat: "Anomaly Clear",   check: "No HIGH flags vs pick",  status: false, weight: 15 },
-  { cat: "Sentiment Fade",  check: "Not chasing public",    status: true,  weight: 5  },
-];
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-const statusColor = (s) =>
-  s === "OUT" ? C.red : s === "GTD" || s === "PROB" ? C.amber : C.green;
-
-const impactBg = (i) =>
-  i === "SEVERE" ? "#2d1515" : i === "HIGH" ? "#2d2010" : i === "MED" ? "#1a1f2d" : "#0f1a10";
-
-const sevColor = (s) =>
-  s === "HIGH" ? C.red : s === "MED" ? C.amber : C.muted;
-
-const Tag = ({ children, color = C.cyan }) => (
-  <span style={{
-    fontFamily: mono, fontSize: 10, letterSpacing: 1,
-    padding: "2px 7px", borderRadius: 3,
-    background: color + "22", color, border: `1px solid ${color}44`,
-  }}>{children}</span>
-);
-
-const Panel = ({ children, style }) => (
-  <div style={{
-    background: C.panel, border: `1px solid ${C.border}`,
-    borderRadius: 8, padding: "16px 20px", ...style,
-  }}>{children}</div>
-);
-
-const SectionTitle = ({ children, accent = C.cyan }) => (
-  <div style={{
-    fontFamily: mono, fontSize: 11, letterSpacing: 3,
-    color: accent, textTransform: "uppercase",
-    borderBottom: `1px solid ${C.border}`, paddingBottom: 10, marginBottom: 16,
-    display: "flex", alignItems: "center", gap: 8,
-  }}>
-    <span style={{ width: 3, height: 12, background: accent, borderRadius: 2, display: "inline-block" }} />
-    {children}
-  </div>
-);
-
-const Pill = ({ v, lo, hi, color }) => {
-  const pct = Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100));
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <div style={{ width: 80, height: 4, background: "#1a2332", borderRadius: 2 }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 2 }} />
-      </div>
-      <span style={{ fontFamily: mono, fontSize: 11, color }}>{v}</span>
-    </div>
-  );
-};
-
-// ─── TABS ─────────────────────────────────────────────────────────────────────
-const TABS = [
-  { id: "odds",      label: "ODDS MVT",   icon: "⟳" },
-  { id: "power",     label: "POWER RTG",  icon: "◈" },
-  { id: "matchup",   label: "MATCHUP",    icon: "⊕" },
-  { id: "injury",    label: "INJURIES",   icon: "⚕" },
-  { id: "h2h",       label: "H2H",        icon: "↔" },
-  { id: "schedule",  label: "FATIGUE",    icon: "⏱" },
-  { id: "consensus", label: "CONSENSUS",  icon: "◉" },
-  { id: "anomaly",   label: "ANOMALY",    icon: "⚠" },
-  { id: "sentiment", label: "SENTIMENT",  icon: "◌" },
-  { id: "checklist", label: "RISK SCORE", icon: "✓" },
-];
-
-// ─── SCREENS ──────────────────────────────────────────────────────────────────
-
-function OddsMovement({ selectedGame }) {
-  const data = ODDS_HISTORY[selectedGame?.id] || ODDS_HISTORY[1];
-  const open = data[0].spread;
-  const close = data[data.length - 1].spread;
-  const moved = Math.abs(close - open).toFixed(1);
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        {[
-          { label: "OPEN SPREAD", val: open > 0 ? `+${open}` : open, color: C.text },
-          { label: "CURRENT",     val: close > 0 ? `+${close}` : close, color: C.cyan },
-          { label: "MOVEMENT",    val: `${moved} pts`, color: moved > 1 ? C.amber : C.green },
-        ].map(({ label, val, color }) => (
-          <Panel key={label}>
-            <div style={{ fontFamily: mono, fontSize: 9, color: C.dim, letterSpacing: 2 }}>{label}</div>
-            <div style={{ fontFamily: mono, fontSize: 24, color, marginTop: 4 }}>{val}</div>
-          </Panel>
-        ))}
-      </div>
-      <Panel>
-        <SectionTitle>SPREAD LINE MOVEMENT</SectionTitle>
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data} margin={{ top: 5, right: 20, bottom: 0, left: 0 }}>
-            <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
-            <XAxis dataKey="t" tick={{ fontFamily: mono, fontSize: 9, fill: C.dim }} />
-            <YAxis tick={{ fontFamily: mono, fontSize: 9, fill: C.dim }} domain={["auto","auto"]} />
-            <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderBright}`, fontFamily: mono, fontSize: 11 }} />
-            <ReferenceLine y={open} stroke={C.muted} strokeDasharray="4 4" label={{ value: "OPEN", fill: C.muted, fontSize: 9, fontFamily: mono }} />
-            <Line type="monotone" dataKey="spread" stroke={C.cyan} strokeWidth={2} dot={{ fill: C.cyan, r: 3 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </Panel>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Panel>
-          <SectionTitle accent={C.amber}>O/U MOVEMENT</SectionTitle>
-          <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={data} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="ouGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={C.amber} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={C.amber} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
-              <XAxis dataKey="t" tick={{ fontFamily: mono, fontSize: 8, fill: C.dim }} />
-              <YAxis tick={{ fontFamily: mono, fontSize: 8, fill: C.dim }} domain={["auto","auto"]} />
-              <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderBright}`, fontFamily: mono, fontSize: 10 }} />
-              <Area type="monotone" dataKey="ou" stroke={C.amber} fill="url(#ouGrad)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Panel>
-        <Panel>
-          <SectionTitle accent={C.purple}>MONEYLINE DRIFT</SectionTitle>
-          <ResponsiveContainer width="100%" height={140}>
-            <LineChart data={data} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke={C.border} strokeDasharray="3 3" />
-              <XAxis dataKey="t" tick={{ fontFamily: mono, fontSize: 8, fill: C.dim }} />
-              <YAxis tick={{ fontFamily: mono, fontSize: 8, fill: C.dim }} domain={["auto","auto"]} />
-              <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderBright}`, fontFamily: mono, fontSize: 10 }} />
-              <Line type="monotone" dataKey="ml" stroke={C.purple} strokeWidth={2} dot={{ fill: C.purple, r: 2 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Panel>
-      </div>
-    </div>
-  );
-}
-
-function PowerRatings() {
-  const radarData = [
-    { metric: "OFF", LAL: 87, BOS: 92 },
-    { metric: "DEF", LAL: 80, BOS: 88 },
-    { metric: "PACE", LAL: 71, BOS: 74 },
-    { metric: "SOS", LAL: 81, BOS: 82 },
-    { metric: "PROJ", LAL: 85, BOS: 91 },
-  ];
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Panel>
-          <SectionTitle>TEAM POWER RANKINGS</SectionTitle>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {POWER_RATINGS.map((r) => (
-              <div key={r.team} style={{
-                display: "grid", gridTemplateColumns: "24px 48px 1fr 60px 50px",
-                alignItems: "center", gap: 10, padding: "6px 0",
-                borderBottom: `1px solid ${C.border}`,
-              }}>
-                <span style={{ fontFamily: mono, fontSize: 10, color: C.muted }}>#{r.rank}</span>
-                <span style={{ fontFamily: mono, fontSize: 13, color: C.cyan, fontWeight: 600 }}>{r.team}</span>
-                <Pill v={r.overall} lo={75} hi={95} color={C.cyan} />
-                <span style={{ fontFamily: mono, fontSize: 11, color: r.overall > 87 ? C.cyan : C.text }}>{r.overall}</span>
-                <span style={{ fontFamily: mono, fontSize: 10, color: r.trend.startsWith("+") ? C.green : C.red }}>{r.trend}</span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <Panel>
-          <SectionTitle accent={C.amber}>MATCHUP RADAR — LAL vs BOS</SectionTitle>
-          <ResponsiveContainer width="100%" height={260}>
-            <RadarChart data={radarData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-              <PolarGrid stroke={C.border} />
-              <PolarAngleAxis dataKey="metric" tick={{ fontFamily: mono, fontSize: 10, fill: C.dim }} />
-              <Radar name="LAL" dataKey="LAL" stroke={C.amber} fill={C.amber} fillOpacity={0.15} strokeWidth={2} />
-              <Radar name="BOS" dataKey="BOS" stroke={C.cyan} fill={C.cyan} fillOpacity={0.15} strokeWidth={2} />
-              <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderBright}`, fontFamily: mono, fontSize: 10 }} />
-            </RadarChart>
-          </ResponsiveContainer>
-          <div style={{ display: "flex", gap: 20, justifyContent: "center" }}>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <div style={{ width: 12, height: 2, background: C.amber }} />
-              <span style={{ fontFamily: mono, fontSize: 10, color: C.amber }}>LAL</span>
-            </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <div style={{ width: 12, height: 2, background: C.cyan }} />
-              <span style={{ fontFamily: mono, fontSize: 10, color: C.cyan }}>BOS</span>
-            </div>
-          </div>
-        </Panel>
-      </div>
-      <Panel>
-        <SectionTitle>COMPONENT BREAKDOWN</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-          {["OFF", "DEF", "PACE", "SOS"].map((cat) => {
-            const vals = POWER_RATINGS.slice(0, 5);
-            return (
-              <div key={cat}>
-                <div style={{ fontFamily: mono, fontSize: 9, color: C.dim, letterSpacing: 2, marginBottom: 8 }}>{cat} RATING</div>
-                <ResponsiveContainer width="100%" height={80}>
-                  <BarChart data={vals} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                    <XAxis dataKey="team" tick={{ fontFamily: mono, fontSize: 8, fill: C.dim }} />
-                    <YAxis domain={[60, 100]} hide />
-                    <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderBright}`, fontFamily: mono, fontSize: 9 }} />
-                    <Bar dataKey={cat.toLowerCase()} fill={C.cyan} radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            );
-          })}
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
-function MatchupStats() {
-  const stats = [
-    { label: "PPG", lal: 118.4, bos: 122.1 },
-    { label: "OPP PPG", lal: 114.2, bos: 108.7 },
-    { label: "NET RTG", lal: "+4.2", bos: "+13.4" },
-    { label: "eFG%", lal: ".534", bos: ".561" },
-    { label: "TOV%", lal: "12.1", bos: "10.8" },
-    { label: "ORB%", lal: "25.4", bos: "22.1" },
-    { label: "FT Rate", lal: ".231", bos: ".198" },
-    { label: "3PA/G", lal: "38.2", bos: "44.7" },
-    { label: "3P%", lal: ".358", bos: ".382" },
-    { label: "PACE", lal: "99.1", bos: "100.4" },
-  ];
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {[
-          { team: "LAL", record: "46-28", ats: "38-36", ou: "41-33-O", streak: "W3", color: C.amber },
-          { team: "BOS", record: "56-18", ats: "45-29", ou: "39-35-O", streak: "W7", color: C.cyan },
-        ].map(({ team, record, ats, ou, streak, color }) => (
-          <Panel key={team} style={{ borderColor: color + "33" }}>
-            <div style={{ fontFamily: mono, fontSize: 28, color, fontWeight: 700 }}>{team}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-              {[["RECORD", record], ["ATS", ats], ["O/U", ou], ["STREAK", streak]].map(([l, v]) => (
-                <div key={l}>
-                  <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, letterSpacing: 2 }}>{l}</div>
-                  <div style={{ fontFamily: mono, fontSize: 13, color }}>{v}</div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        ))}
-      </div>
-      <Panel>
-        <SectionTitle>HEAD-TO-HEAD STAT COMPARISON</SectionTitle>
-        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          {stats.map(({ label, lal, bos }) => {
-            const lalN = parseFloat(lal);
-            const bosN = parseFloat(bos);
-            const lalBetter = !isNaN(lalN) && !isNaN(bosN) && lalN > bosN;
-            return (
-              <div key={label} style={{
-                display: "grid", gridTemplateColumns: "80px 1fr 80px 80px 1fr 80px",
-                alignItems: "center", gap: 8, padding: "8px 0",
-                borderBottom: `1px solid ${C.border}`,
-              }}>
-                <span style={{ fontFamily: mono, fontSize: 12, color: lalBetter ? C.amber : C.text, <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quantum V2 Terminal</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap');
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Quantum V2 Terminal</title>
+  <style>
+    /* ── BASE ── */
+    :root {
+      --gold:   #ffcc00;
+      --neon:   #39ff14;
+      --red:    #ff4444;
+      --cyan:   #00d4ff;
+      --purple: #a855f7;
+      --bg:     #0a0a0a;
+      --card:   #111;
+      --border: #1e1e1e;
+      --dim:    #555;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: #ccc;
+      font-family: 'Courier New', monospace;
+      padding-bottom: 65px;
+      min-height: 100vh;
+    }
 
-        :root {
-            --gold: #ffcc00;
-            --neon: #39ff14;
-            --red: #ff3c3c;
-            --blue: #00cfff;
-            --bg: #0a0a0a;
-            --card: #111111;
-            --border: #2a2a2a;
-            --muted: #555;
-            --font-mono: 'Share Tech Mono', monospace;
-            --font-display: 'Orbitron', monospace;
-        }
+    /* ── HEADER ── */
+    header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0d0d0d;
+    }
+    header h1 { font-size: 18px; letter-spacing: 3px; color: #fff; }
+    header h1 span { color: var(--gold); }
+    #status-bar { font-size: 10px; color: var(--dim); text-align: right; line-height: 1.6; }
+    #live-dot { display: inline-block; width: 6px; height: 6px; background: var(--neon);
+      border-radius: 50%; margin-right: 4px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ── LEAGUE FILTER ── */
+    #league-bar {
+      display: flex; gap: 6px; padding: 10px 12px;
+      background: #0d0d0d; border-bottom: 1px solid #1a1a1a;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .league-btn {
+      padding: 4px 12px; border-radius: 3px; font-family: monospace; font-size: 10px;
+      font-weight: bold; letter-spacing: 1px; cursor: pointer; white-space: nowrap;
+      border: 1px solid #333; background: transparent; color: var(--dim);
+      transition: all .2s;
+    }
+    .league-btn.active { border-color: var(--gold); color: var(--gold); background: rgba(255,204,0,.08); }
 
-        body {
-            background: var(--bg);
-            color: #ccc;
-            font-family: var(--font-mono);
-            padding-bottom: 70px;
-            min-height: 100vh;
-        }
+    /* ── TABS ── */
+    .tab-content { display: none; padding: 12px; }
+    .tab-content.active { display: block; }
 
-        /* ── HEADER ── */
-        header {
-            padding: 18px 20px 14px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        header h1 {
-            font-family: var(--font-display);
-            font-size: 1.3rem;
-            letter-spacing: 4px;
-            color: white;
-        }
-        header h1 span { color: var(--gold); }
-        #status-dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            background: var(--muted);
-            box-shadow: none;
-            transition: background 0.4s, box-shadow 0.4s;
-        }
-        #status-dot.live {
-            background: var(--neon);
-            box-shadow: 0 0 8px var(--neon);
-            animation: pulse 2s infinite;
-        }
-        #status-dot.error { background: var(--red); }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
+    /* ── CARDS ── */
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-left: 3px solid #333; border-radius: 4px;
+      padding: 12px 14px; margin-bottom: 10px;
+    }
+    .card.upset-prime { border-left-color: var(--gold); box-shadow: 0 0 12px rgba(255,204,0,.15); }
+    .card.upset-watch { border-left-color: var(--neon);  box-shadow: 0 0 8px  rgba(57,255,20,.1); }
+    .card.neutral     { border-left-color: var(--cyan); }
+    .card.favor       { border-left-color: var(--dim); }
 
-        /* ── TABS ── */
-        .tab-content { display: none; padding: 16px; }
-        .tab-content.active { display: block; }
+    .matchup-name { font-size: 14px; font-weight: bold; color: #fff; margin: 6px 0 4px; }
+    .sub { font-size: 10px; color: var(--dim); letter-spacing: 1px; }
+    .tier-badge {
+      display: inline-block; font-size: 9px; font-weight: bold; letter-spacing: 2px;
+      padding: 3px 8px; border-radius: 2px; margin-left: 8px;
+    }
+    .tier-PRIME { background: rgba(255,204,0,.15); color: var(--gold); border: 1px solid rgba(255,204,0,.3); }
+    .tier-WATCH { background: rgba(57,255,20,.1);  color: var(--neon);  border: 1px solid rgba(57,255,20,.2); }
+    .tier-NEUTRAL { background: rgba(0,212,255,.1); color: var(--cyan); border: 1px solid rgba(0,212,255,.2); }
+    .tier-FAVOR   { background: rgba(85,85,85,.2);  color: var(--dim);  border: 1px solid #333; }
 
-        .section-label {
-            font-family: var(--font-display);
-            font-size: 0.6rem;
-            letter-spacing: 5px;
-            color: var(--muted);
-            margin-bottom: 16px;
-            text-transform: uppercase;
-        }
+    /* ── STAT ROW ── */
+    .stat-row { display: flex; justify-content: space-between; margin-top: 8px; gap: 8px; flex-wrap: wrap; }
+    .stat-box { flex: 1; min-width: 80px; background: #0d0d0d; border: 1px solid #1a1a1a;
+      border-radius: 3px; padding: 6px 8px; text-align: center; }
+    .stat-val { font-size: 15px; font-weight: bold; margin-top: 2px; }
+    .stat-lbl { font-size: 8px; color: var(--dim); letter-spacing: 1px; }
 
-        /* ── HUB CARDS ── */
-        .card {
-            background: var(--card);
-            padding: 14px 16px;
-            margin-bottom: 10px;
-            border-left: 3px solid var(--border);
-            border-radius: 3px;
-            transition: border-color 0.2s;
-        }
-        .card.gold-border {
-            border-left-color: var(--gold);
-            background: #141200;
-            box-shadow: 0 0 16px rgba(255,204,0,0.08);
-        }
-        .card-meta {
-            font-size: 0.65rem;
-            color: var(--muted);
-            letter-spacing: 2px;
-            margin-bottom: 6px;
-        }
-        .card-meta .vermeer-tag {
-            color: var(--gold);
-            margin-left: 8px;
-        }
-        .card h4 {
-            font-family: var(--font-mono);
-            font-size: 0.95rem;
-            color: white;
-            margin-bottom: 8px;
-            line-height: 1.4;
-        }
-        .card-stat { font-size: 0.75rem; color: #777; }
-        .card-stat span { color: var(--neon); font-size: 0.9rem; }
-        .card-stat .edge-neg { color: var(--red); }
-        .card-stat .edge-pos { color: var(--neon); }
+    /* ── UPSET SCORE BAR ── */
+    .score-bar-wrap { margin-top: 10px; }
+    .score-bar-track { height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+    .score-bar-fill  { height: 100%; border-radius: 3px; transition: width .6s; }
+    .score-bar-label { display: flex; justify-content: space-between; margin-top: 4px; }
+    .score-bar-label span { font-size: 9px; color: var(--dim); }
 
-        /* ── POISSON TAB ── */
-        .poisson-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 16px;
-            margin-bottom: 12px;
-        }
-        .poisson-card h4 {
-            font-size: 0.85rem;
-            color: white;
-            margin-bottom: 12px;
-            line-height: 1.4;
-        }
-        .lambda-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-            gap: 10px;
-        }
-        .lambda-label {
-            font-size: 0.65rem;
-            letter-spacing: 2px;
-            color: var(--muted);
-            white-space: nowrap;
-            width: 55px;
-        }
-        .lambda-bar-wrap {
-            flex: 1;
-            background: #1a1a1a;
-            height: 6px;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-        .lambda-bar {
-            height: 100%;
-            border-radius: 3px;
-            transition: width 0.6s ease;
-        }
-        .lambda-bar.away { background: var(--blue); }
-        .lambda-bar.home { background: var(--gold); }
-        .lambda-val {
-            font-size: 0.75rem;
-            width: 32px;
-            text-align: right;
-            color: #aaa;
-        }
-        .poisson-divider {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.65rem;
-            color: var(--muted);
-            letter-spacing: 1px;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border);
-        }
-        .poisson-divider .win-prob { color: var(--neon); }
-        .poisson-divider .rating-edge.pos { color: var(--neon); }
-        .poisson-divider .rating-edge.neg { color: var(--red); }
+    /* ── SIGNAL LAYERS ── */
+    .signal-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 0; border-bottom: 1px solid #161616; font-size: 11px;
+    }
+    .signal-row:last-child { border-bottom: none; }
+    .sig-icon { font-size: 12px; width: 16px; text-align: center; }
+    .sig-layer { flex: 1; color: #888; font-size: 10px; letter-spacing: 1px; }
+    .sig-note  { font-size: 10px; color: var(--dim); flex: 2; }
+    .sig-badge { width: 70px; text-align: center; padding: 2px 6px; border-radius: 2px;
+      font-size: 9px; font-weight: bold; letter-spacing: 1px; }
+    .sig-up   { background: rgba(57,255,20,.12);  color: var(--neon); border: 1px solid rgba(57,255,20,.2); }
+    .sig-down { background: rgba(255,68,68,.12);  color: var(--red);  border: 1px solid rgba(255,68,68,.2); }
+    .sig-neut { background: rgba(85,85,85,.15);   color: var(--dim);  border: 1px solid #333; }
 
-        /* ── ROSTER TAB ── */
-        .ratings-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-        .rating-chip {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            padding: 10px 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .rating-chip .team-name { font-size: 0.75rem; color: #aaa; }
-        .rating-chip .rating-val {
-            font-size: 0.85rem;
-            font-weight: bold;
-        }
-        .rating-chip .rating-val.above { color: var(--neon); }
-        .rating-chip .rating-val.below { color: var(--red); }
-        .rating-chip .rating-val.avg { color: var(--muted); }
+    /* ── MC BARS ── */
+    .mc-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
+    .mc-bar-label { width: 60px; color: var(--dim); font-size: 10px; }
+    .mc-bar-track { flex: 1; height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; }
+    .mc-bar-fill  { height: 100%; border-radius: 4px; }
 
-        /* ── EMPTY / ERROR STATES ── */
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: var(--muted);
-            font-size: 0.8rem;
-            line-height: 2;
-            letter-spacing: 1px;
-        }
+    /* ── SCORE MATRIX ── */
+    .matrix-scroll { overflow-x: auto; margin-top: 10px; }
+    table { border-collapse: collapse; width: 100%; font-size: 10px; }
+    th, td { border: 1px solid #1a1a1a; padding: 4px 6px; text-align: center; }
+    th { color: var(--gold); background: #111; }
+    td { color: #888; }
+    td.top-score { color: var(--neon); background: rgba(57,255,20,.06); }
 
-        /* ── NAV ── */
-        .nav {
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            display: flex;
-            background: #0d0d0d;
-            border-top: 1px solid var(--border);
-            z-index: 100;
-        }
-        .nav-btn {
-            flex: 1;
-            padding: 14px 0;
-            border: none;
-            background: none;
-            color: var(--muted);
-            font-family: var(--font-display);
-            font-size: 0.5rem;
-            letter-spacing: 3px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: color 0.2s;
-            border-top: 2px solid transparent;
-        }
-        .nav-btn.active {
-            color: var(--gold);
-            border-top-color: var(--gold);
-        }
-    </style>
+    /* ── KELLY BOX ── */
+    .kelly-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .kelly-cell { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 3px;
+      padding: 8px; text-align: center; }
+    .kelly-val { font-size: 18px; font-weight: bold; margin-top: 2px; }
+
+    /* ── SECTION HEADER ── */
+    .sec-header {
+      font-size: 10px; letter-spacing: 3px; color: var(--gold);
+      border-bottom: 1px solid #1a1a1a; padding-bottom: 8px;
+      margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+    }
+    .sec-header::before { content: ''; display: inline-block; width: 3px; height: 12px;
+      background: var(--gold); border-radius: 2px; }
+
+    /* ── EMPTY / ERROR ── */
+    .state-msg { text-align: center; padding: 40px 20px; color: var(--dim); font-size: 12px; }
+    .err { color: var(--red); }
+
+    /* ── BOTTOM NAV ── */
+    .nav {
+      position: fixed; bottom: 0; width: 100%;
+      display: flex; background: #0d0d0d;
+      border-top: 1px solid #222; z-index: 100;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .nav-btn {
+      flex: 1; min-width: 70px; padding: 12px 6px 10px; border: none;
+      background: none; color: var(--dim); cursor: pointer;
+      font-family: monospace; font-size: 8px; font-weight: bold;
+      letter-spacing: 1px; line-height: 1.4; text-align: center;
+      border-top: 2px solid transparent; transition: all .2s;
+    }
+    .nav-btn .nav-icon { font-size: 14px; display: block; }
+    .nav-btn.active { color: var(--gold); border-top-color: var(--gold); }
+
+    /* ── REFRESH BTN ── */
+    #refresh-btn {
+      display: block; width: calc(100% - 24px); margin: 0 12px 12px;
+      padding: 10px; background: transparent; border: 1px solid #333;
+      color: var(--dim); font-family: monospace; font-size: 10px;
+      letter-spacing: 2px; cursor: pointer; border-radius: 3px; transition: all .2s;
+    }
+    #refresh-btn:hover { border-color: var(--gold); color: var(--gold); }
+    #refresh-btn.loading { color: var(--gold); border-color: var(--gold);
+      animation: pulse 1s infinite; }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  </style>
 </head>
 <body>
-    <header>
-        <h1>QUANTUM<span>V2</span></h1>
-        <div id="status-dot" title="Engine status"></div>
-    </header>
 
-    <!-- HUB TAB -->
-    <div id="hub" class="tab-content active">
-        <p class="section-label">Triangulation Hub</p>
-        <div id="hub-list">
-            <div class="empty-state">SYNCING ENGINE...</div>
+<!-- HEADER -->
+<header>
+  <h1>QUANTUM<span>V2</span></h1>
+  <div id="status-bar">
+    <span id="live-dot"></span><span id="live-label">SYNCING</span><br>
+    <span id="last-sync">--</span>
+  </div>
+</header>
+
+<!-- LEAGUE FILTER -->
+<div id="league-bar">
+  <button class="league-btn active" data-league="all">ALL</button>
+  <button class="league-btn" data-league="nba">NBA</button>
+  <button class="league-btn" data-league="nfl">NFL</button>
+  <button class="league-btn" data-league="nhl">NHL</button>
+  <button class="league-btn" data-league="mlb">MLB</button>
+</div>
+
+<!-- ── TAB CONTENTS ── -->
+
+<!-- 1. TRIANGULATION HUB -->
+<div id="tab-hub" class="tab-content active">
+  <div class="sec-header">TRIANGULATION HUB</div>
+  <div id="hub-list"><div class="state-msg">Initializing engine...</div></div>
+</div>
+
+<!-- 2. POISSON DEEP-DIVE -->
+<div id="tab-poisson" class="tab-content">
+  <div class="sec-header">POISSON DEEP-DIVE</div>
+  <div id="poisson-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 3. MONTE CARLO -->
+<div id="tab-mc" class="tab-content">
+  <div class="sec-header">MONTE CARLO — 10,000 RUNS</div>
+  <div id="mc-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 4. SIGNAL LAYERS -->
+<div id="tab-signals" class="tab-content">
+  <div class="sec-header">10-LAYER SIGNAL ENGINE</div>
+  <div id="signal-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 5. POWER RATINGS -->
+<div id="tab-power" class="tab-content">
+  <div class="sec-header">POWER RATING MATRIX</div>
+  <div id="power-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 6. ODDS MOVEMENT -->
+<div id="tab-odds" class="tab-content">
+  <div class="sec-header">ODDS MOVEMENT TRACKER</div>
+  <div id="odds-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 7. KELLY -->
+<div id="tab-kelly" class="tab-content">
+  <div class="sec-header">KELLY CRITERION SIZING</div>
+  <div id="kelly-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 8. ANOMALY -->
+<div id="tab-anomaly" class="tab-content">
+  <div class="sec-header">ANOMALY DETECTOR</div>
+  <div id="anomaly-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 9. SENTIMENT -->
+<div id="tab-sentiment" class="tab-content">
+  <div class="sec-header">PUBLIC SENTIMENT MONITOR</div>
+  <div id="sentiment-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<!-- 10. RISK SCORE -->
+<div id="tab-risk" class="tab-content">
+  <div class="sec-header">RISK SCORE CHECKLIST</div>
+  <div id="risk-list"><div class="state-msg">Load data first</div></div>
+</div>
+
+<button id="refresh-btn" onclick="sync()">⟳ REFRESH ENGINE</button>
+
+<!-- BOTTOM NAV -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="showTab('hub',this)">
+    <span class="nav-icon">◈</span>HUB
+  </button>
+  <button class="nav-btn" onclick="showTab('poisson',this)">
+    <span class="nav-icon">∿</span>POISSON
+  </button>
+  <button class="nav-btn" onclick="showTab('mc',this)">
+    <span class="nav-icon">⊞</span>MONTE C
+  </button>
+  <button class="nav-btn" onclick="showTab('signals',this)">
+    <span class="nav-icon">⚡</span>SIGNALS
+  </button>
+  <button class="nav-btn" onclick="showTab('power',this)">
+    <span class="nav-icon">◉</span>POWER
+  </button>
+  <button class="nav-btn" onclick="showTab('odds',this)">
+    <span class="nav-icon">⟳</span>ODDS
+  </button>
+  <button class="nav-btn" onclick="showTab('kelly',this)">
+    <span class="nav-icon">◑</span>KELLY
+  </button>
+  <button class="nav-btn" onclick="showTab('anomaly',this)">
+    <span class="nav-icon">⚠</span>ANOMALY
+  </button>
+  <button class="nav-btn" onclick="showTab('sentiment',this)">
+    <span class="nav-icon">◌</span>SENT
+  </button>
+  <button class="nav-btn" onclick="showTab('risk',this)">
+    <span class="nav-icon">✓</span>RISK
+  </button>
+</nav>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────
+let ALL_GAMES  = [];
+let activeLeague = 'all';
+
+// ── TAB SWITCHING ──────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  renderActiveTab(id);
+}
+
+function renderActiveTab(id) {
+  const games = filteredGames();
+  switch(id) {
+    case 'hub':       renderHub(games);       break;
+    case 'poisson':   renderPoisson(games);   break;
+    case 'mc':        renderMC(games);        break;
+    case 'signals':   renderSignals(games);   break;
+    case 'power':     renderPower(games);     break;
+    case 'odds':      renderOdds(games);      break;
+    case 'kelly':     renderKelly(games);     break;
+    case 'anomaly':   renderAnomaly(games);   break;
+    case 'sentiment': renderSentiment(games); break;
+    case 'risk':      renderRisk(games);      break;
+  }
+}
+
+// ── LEAGUE FILTER ──────────────────────────────────────────────
+document.querySelectorAll('.league-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.league-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeLeague = btn.dataset.league;
+    const current = document.querySelector('.tab-content.active')?.id.replace('tab-','');
+    if (current) renderActiveTab(current);
+  });
+});
+
+function filteredGames() {
+  if (activeLeague === 'all') return ALL_GAMES;
+  return ALL_GAMES.filter(g => g.sport?.includes(activeLeague));
+}
+
+// ── HELPERS ────────────────────────────────────────────────────
+function tierClass(tier) {
+  if (!tier) return 'neutral';
+  if (tier.includes('PRIME')) return 'upset-prime';
+  if (tier.includes('WATCH')) return 'upset-watch';
+  if (tier.includes('FAVOR')) return 'favor';
+  return 'neutral';
+}
+function tierKey(tier) {
+  if (!tier) return 'NEUTRAL';
+  if (tier.includes('PRIME')) return 'PRIME';
+  if (tier.includes('WATCH')) return 'WATCH';
+  if (tier.includes('FAVOR')) return 'FAVOR';
+  return 'NEUTRAL';
+}
+function scoreColor(v) {
+  if (v >= 75) return 'var(--gold)';
+  if (v >= 62) return 'var(--neon)';
+  if (v >= 45) return 'var(--cyan)';
+  return 'var(--dim)';
+}
+function fmt(v, dec=1) { return (v==null||isNaN(v)) ? '--' : Number(v).toFixed(dec); }
+function fmtML(ml) {
+  if (ml == null) return '--';
+  return ml > 0 ? '+' + ml : '' + ml;
+}
+function noData(el) {
+  el.innerHTML = '<div class="state-msg">No games found for this filter.</div>';
+}
+
+// ── UPSET SCORE BAR ────────────────────────────────────────────
+function scoreBar(score) {
+  const col = scoreColor(score);
+  return `
+    <div class="score-bar-wrap">
+      <div class="score-bar-track">
+        <div class="score-bar-fill" style="width:${score}%;background:${col}"></div>
+      </div>
+      <div class="score-bar-label">
+        <span>UPSET SCORE</span>
+        <span style="color:${col};font-weight:bold">${fmt(score)}%</span>
+      </div>
+    </div>`;
+}
+
+// ── 1. HUB ─────────────────────────────────────────────────────
+function renderHub(games) {
+  const el = document.getElementById('hub-list');
+  if (!games.length) { noData(el); return; }
+  el.innerHTML = games.map(g => `
+    <div class="card ${tierClass(g.tier)}">
+      <div class="sub">${g.sport?.replace('basketball_','').replace('americanfootball_','').replace('icehockey_','').toUpperCase() || ''} · ${g.bookmaker}</div>
+      <div class="matchup-name">
+        ${g.matchup}
+        <span class="tier-badge tier-${tierKey(g.tier)}">${g.tier}</span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-lbl">DOG</div>
+          <div class="stat-val" style="color:var(--neon);font-size:12px">${g.dogTeam?.split(' ').pop()}</div>
         </div>
-    </div>
-
-    <!-- POISSON TAB -->
-    <div id="poisson" class="tab-content">
-        <p class="section-label">Poisson Deep-Dive</p>
-        <div id="poisson-list">
-            <div class="empty-state">AWAITING DATA SYNC</div>
+        <div class="stat-box">
+          <div class="stat-lbl">MC WIN%</div>
+          <div class="stat-val" style="color:${scoreColor(g.monteCarlo?.winRate)}">${fmt(g.monteCarlo?.winRate)}%</div>
         </div>
+        <div class="stat-box">
+          <div class="stat-lbl">MARKET%</div>
+          <div class="stat-val" style="color:var(--dim)">${fmt(g.impliedDogProb)}%</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-lbl">EDGE</div>
+          <div class="stat-val" style="color:${g.kelly?.edge>0?'var(--neon)':'var(--red)'}">${g.kelly?.edge > 0 ? '+' : ''}${fmt(g.kelly?.edge)}%</div>
+        </div>
+      </div>
+      ${scoreBar(g.upsetScore)}
     </div>
+  `).join('');
+}
 
-    <!-- ROSTER TAB -->
-    <div id="roster" class="tab-content">
-        <p class="section-label">Power Ratings Matrix</p>
-        <div class="ratings-grid" id="roster-grid"></div>
+// ── 2. POISSON ─────────────────────────────────────────────────
+function renderPoisson(games) {
+  const el = document.getElementById('poisson-list');
+  if (!games.length) { noData(el); return; }
+  el.innerHTML = games.map(g => `
+    <div class="card ${tierClass(g.tier)}">
+      <div class="matchup-name">${g.matchup}</div>
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-lbl">λ HOME</div>
+          <div class="stat-val" style="color:var(--gold)">${fmt(g.lambdas?.home)}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-lbl">λ AWAY</div>
+          <div class="stat-val" style="color:var(--cyan)">${fmt(g.lambdas?.away)}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-lbl">HOME WIN%</div>
+          <div class="stat-val" style="color:var(--gold)">${fmt(g.poisson?.homeWinProb)}%</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-lbl">AWAY WIN%</div>
+          <div class="stat-val" style="color:var(--cyan)">${fmt(g.poisson?.awayWinProb)}%</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:9px;color:var(--dim);letter-spacing:1px">TOP SCORE PROBABILITIES</div>
+      <div class="matrix-scroll">
+        <table>
+          <tr><th>HOME</th><th>AWAY</th><th>PROB %</th></tr>
+          ${(g.poisson?.topScores||[]).slice(0,8).map((s,i) => `
+            <tr>
+              <td class="${i<3?'top-score':''}">${s.scoreA}</td>
+              <td class="${i<3?'top-score':''}">${s.scoreB}</td>
+              <td class="${i<3?'top-score':''}">${(s.prob*100).toFixed(3)}%</td>
+            </tr>
+          `).join('')}
+        </table>
+      </div>
     </div>
+  `).join('');
+}
 
-    <nav class="nav">
-        <button class="nav-btn active" onclick="showTab(event,'hub')">HUB</button>
-        <button class="nav-btn" onclick="showTab(event,'poisson')">POISSON</button>
-        <button class="nav-btn" onclick="showTab(event,'roster')">MATRIX</button>
-    </nav>
-
-    <script>
-        // ── TAB SWITCHING ──
-        function showTab(e, id) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            e.target.classList.add('active');
-        }
-
-        // ── RATINGS (mirrored from server for ROSTER tab) ──
-        const NHL_RATINGS = {
-            "Rangers":1.15,"Bruins":1.10,"Panthers":1.12,"Hurricanes":1.11,
-            "Blue Jackets":0.82,"Blackhawks":0.80,"Ducks":0.84,"Sharks":0.78,
-            "Islanders":0.98,"Senators":1.02,"Jets":1.08,"Red Wings":1.01
-        };
-
-        function buildRosterTab() {
-            const grid = document.getElementById('roster-grid');
-            const sorted = Object.entries(NHL_RATINGS).sort((a,b) => b[1] - a[1]);
-            grid.innerHTML = sorted.map(([team, rating]) => {
-                const cls = rating > 1.05 ? 'above' : rating < 0.95 ? 'below' : 'avg';
-                return `
-                    <div class="rating-chip">
-                        <span class="team-name">${team.toUpperCase()}</span>
-                        <span class="rating-val ${cls}">${rating.toFixed(2)}</span>
-                    </div>`;
-            }).join('');
-        }
-
-        // ── POISSON BAR: scale lambda to a % bar (range 0.75–1.25 maps to 10%–100%) ──
-        function lambdaToBar(lambda) {
-            const min = 2.0, max = 4.2;
-            return Math.min(100, Math.max(8, ((lambda - min) / (max - min)) * 100)).toFixed(1);
-        }
-
-        // ── RENDER POISSON TAB ──
-        function renderPoisson(games) {
-            const el = document.getElementById('poisson-list');
-            if (!games.length) {
-                el.innerHTML = '<div class="empty-state">NO GAMES SCHEDULED TODAY</div>';
-                return;
-            }
-            el.innerHTML = games.map(g => {
-                const edgeCls = g.ratingEdge > 0 ? 'pos' : 'neg';
-                const edgeSign = g.ratingEdge > 0 ? '+' : '';
-                return `
-                <div class="poisson-card">
-                    <h4>${g.away} @ ${g.home}</h4>
-                    <div class="lambda-row">
-                        <div class="lambda-label">AWAY λ</div>
-                        <div class="lambda-bar-wrap">
-                            <div class="lambda-bar away" style="width:${lambdaToBar(g.awayLambda)}%"></div>
-                        </div>
-                        <div class="lambda-val">${g.awayLambda}</div>
-                    </div>
-                    <div class="lambda-row">
-                        <div class="lambda-label">HOME λ</div>
-                        <div class="lambda-bar-wrap">
-                            <div class="lambda-bar home" style="width:${lambdaToBar(g.homeLambda)}%"></div>
-                        </div>
-                        <div class="lambda-val">${g.homeLambda}</div>
-                    </div>
-                    <div class="poisson-divider">
-                        <div>AWAY WIN PROB: <span class="win-prob">${g.upsetChance}%</span></div>
-                        <div>RATING EDGE: <span class="rating-edge ${edgeCls}">${edgeSign}${g.ratingEdge}</span></div>
-                    </div>
-                </div>`;
-            }).join('');
-        }
-
-        // ── RENDER HUB TAB ──
-        function renderHub(games) {
-            const el = document.getElementById('hub-list');
-            if (!games.length) {
-                el.innerHTML = '<div class="empty-state">NO GAMES SCHEDULED TODAY<br>CHECK BACK LATER</div>';
-                return;
-            }
-            el.innerHTML = games.map(g => {
-                const edgeCls = g.ratingEdge >= 0 ? 'edge-pos' : 'edge-neg';
-                const edgeSign = g.ratingEdge > 0 ? '+' : '';
-                const vermeerTag = g.isVermeer ? '<span class="vermeer-tag">◆ VERMEER</span>' : '';
-                return `
-                <div class="card ${g.isVermeer ? 'gold-border' : ''}">
-                    <div class="card-meta">
-                        ${g.sport} · ${g.source}${vermeerTag}
-                    </div>
-                    <h4>${g.matchup}</h4>
-                    <div class="card-stat">
-                        AWAY WIN PROB: <span>${g.upsetChance}%</span>
-                        &nbsp;&nbsp;
-                        EDGE: <span class="${edgeCls}">${edgeSign}${g.ratingEdge}</span>
-                    </div>
-                </div>`;
-            }).join('');
-        }
-
-        // ── MAIN SYNC ──
-        async function sync() {
-            const dot = document.getElementById('status-dot');
-            try {
-                const res = await fetch('/api/predict');
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-
-                dot.className = 'live';
-                renderHub(data);
-                renderPoisson(data);
-            } catch (e) {
-                dot.className = 'error';
-                document.getElementById('hub-list').innerHTML =
-                    '<div class="empty-state">SYNC ERROR<br>CHECK API KEYS / NETWORK</div>';
-                document.getElementById('poisson-list').innerHTML =
-                    '<div class="empty-state">NO DATA</div>';
-            }
-        }
-
-        buildRosterTab();
-        sync();
-    </script>
-</body>
-</html>
+// ── 3. MONTE CARLO ─────────────────────────────────────────────
+function renderMC(games) {
+  const el = document.getElementById('mc-list');
+  if (!games.length) { noData(el); return; }
+  el.innerHTML = games.map(g => {
+    const mc = g.monteCarlo || {};
+    return `
+    <div class="card ${tierClass(g.tier)}">
+      <div class="matchup-name">${g.matchup}</div>
+      <div class="sub">DOG: ${g.dogTeam} · λ=${fmt(g.lambdas?.dog)} | FAV: ${g.favTeam} · λ=${fmt(g.lambdas?.fav)} | SPREAD: ${g.spread}</div>
+      <div style="margin:12px 0 6px">
+        <div class="mc-bar-row">
+          <div class="mc-bar-label">DOG WINS</div>
+          <div class="mc-bar-track"><div class="mc-bar-fill" style="width:${mc.winRate}%;background:var(--neon)"></div></div>
+          <span style="font-size:11px;color:var(--neon);width:48px;text-align:right">${fmt(mc.winRate)}%</span>
+        </div>
+        <div class="mc-bar-row">
+          <div class="mc-bar-label">PUSH</div>
+          <div class="mc-bar-track"><div class="mc-bar-fill" style="width:${mc.pushRate}%;background:var(--gold)"></div></div>
+          <span style="font-size:11px;color:var(--gold);width:48px;text-align:right">${fmt(mc.pushRate)}%</span>
+        </div>
+        <div class="mc-bar-row">
+          <div class="mc-bar-label">FAV HOLDS</div>
+          <div class="mc-bar-track"><div class="mc-bar-fill" style="width:${mc.lossRate}%;background:var(--red)"></div></div>
+          <span style="font-size:11px;color:var(--red);width:48px;te
